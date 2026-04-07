@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Greenside</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="logo.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f4d2e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyCluj8g-VsVI1fHQCajID8z-lMBQGxe8Cg",
+      authDomain: "greenside-c86cf.firebaseapp.com",
+      projectId: "greenside-c86cf",
+      storageBucket: "greenside-c86cf.firebasestorage.app",
+      messagingSenderId: "748663106763",
+      appId: "1:748663106763:web:bfd77b8e885ccfb19f3f4e"
+    });
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+  </script>
+
+  <!-- Welcome Screen -->
+  <div id="welcome-screen" class="welcome-screen">
+    <div class="welcome-content">
+      <img src="logo.png" alt="Greenside" class="welcome-logo">
+      <h1 class="welcome-title">G R E E N S I D E</h1>
+      <p class="welcome-tagline">Score. Bet. Settle up.</p>
+      <p class="welcome-version">v1.0.0</p>
+      <div class="welcome-actions">
+        <button class="btn primary large" onclick="dismissWelcome()">Start New Round</button>
+        <button id="welcome-resume" class="btn secondary large hidden" onclick="resumeFromWelcome()">Resume Last Round</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <header onclick="goHome()" style="cursor:pointer">
+      <img src="logo.png" alt="Greenside" class="header-logo">
+      <h1>Greenside</h1>
+      <p>Score. Bet. Settle up.</p>
+    </header>
+
+    <!-- Auth Bar -->
+    <div id="auth-bar" class="auth-bar">
+      <div id="auth-signed-out">
+        <button class="btn primary" onclick="signInWithGoogle()" style="width:100%">🔑 Sign in with Google to sync data</button>
+        <div class="hint" style="text-align:center;margin-top:4px">Or continue without sign-in (local only)</div>
+      </div>
+      <div id="auth-signed-in" class="hidden">
+        <div class="auth-user">
+          <img id="auth-avatar" class="auth-avatar" src="" alt="">
+          <span id="auth-name" class="auth-name"></span>
+          <button class="auth-signout" onclick="signOutUser()">Sign Out</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav Bar -->
+    <div id="nav-bar" class="nav-bar">
+      <button class="nav-tab active" onclick="showScreen('setup')" data-screen="setup">+ New Round</button>
+      <button class="nav-tab" onclick="showScreen('live')" data-screen="live">🔴 Live <span id="live-count" class="nav-count"></span></button>
+      <button class="nav-tab" onclick="showScreen('history')" data-screen="history">📜 History <span id="history-count" class="nav-count"></span></button>
+    </div>
+
+    <!-- Home button (visible during round) -->
+    <div id="home-btn" class="home-btn hidden" onclick="goHome()">🏠 Home</div>
+
+    <!-- Live Games Screen -->
+    <div id="live-screen" class="hidden">
+      <div id="live-list"></div>
+      <div id="live-empty" class="empty-state hidden">No live rounds. Start a new round!</div>
+    </div>
+
+    <!-- History Screen -->
+    <div id="history-screen" class="hidden">
+      <div id="history-list"></div>
+      <div id="history-empty" class="empty-state hidden">No finished rounds yet.</div>
+      <button class="btn secondary" onclick="exportAllData()" style="width:100%;margin-top:12px">📦 Export All Data (Backup)</button>
+    </div>
+
+    <!-- Setup Screen -->
+    <div id="setup-screen">
+      <div id="resume-card" class="hidden"></div>
+      <section class="card">
+        <h2><span class="icon">🏌️</span> Course Setup</h2>
+        <div class="form-group">
+          <label>Search US Courses</label>
+          <div class="course-search-wrap">
+            <input type="text" id="course-search" placeholder="Search by course name..." autocomplete="off">
+            <div id="course-results" class="course-results hidden"></div>
+          </div>
+        </div>
+        <div id="selected-course" class="selected-course hidden"></div>
+        <div class="form-group">
+          <label>Or Enter Manually</label>
+          <input type="text" id="course-name" placeholder="Course name">
+        </div>
+        <div class="form-group">
+          <label>Holes</label>
+          <div class="hole-toggle">
+            <button class="hole-toggle-btn active" onclick="setHoleCount(9)" data-holes="9">9 Holes</button>
+            <button class="hole-toggle-btn" onclick="setHoleCount(18)" data-holes="18">18 Holes</button>
+          </div>
+        </div>
+        <div id="par-entry">
+          <h3>Hole Pars & Handicap Strokes <span id="par-total" class="par-total-badge"></span></h3>
+          <p class="hint">Handicap rank: 1 = hardest hole, 18 = easiest</p>
+          <div class="nine-header">Front Nine</div>
+          <div class="par-grid" id="front-pars"></div>
+          <div id="back-nine-section" class="hidden">
+            <div class="nine-header">Back Nine</div>
+            <div class="par-grid" id="back-pars"></div>
+          </div>
+        </div>
+        <button class="btn secondary" onclick="saveCourse()" style="width:100%;margin-top:10px">💾 Save Course for Future Rounds</button>
+      </section>
+
+      <section class="card">
+        <h2><span class="icon">👥</span> Players</h2>
+        <div id="players-list"></div>
+        <button id="add-player-btn" class="btn secondary" style="width:100%;margin-top:6px">+ Add Player</button>
+      </section>
+
+      <section class="card">
+        <h2><span class="icon">💰</span> Betting Game</h2>
+        <div class="form-group">
+          <label>Game Type</label>
+          <select id="game-type">
+            <option value="wolf" selected>Wolf Hammer</option>
+            <option value="nassau">Nassau (Front/Back/Overall Match)</option>
+            <option value="skins">Skins (Low Net Wins Pot)</option>
+            <option value="match">Match Play (Hole-by-Hole $)</option>
+            <option value="stableford">Stableford (Points Pool)</option>
+            <option value="bingo">Bingo Bango Bongo (3 pts/hole)</option>
+            <option value="dots">Trash / Dots (Side Bets)</option>
+          </select>
+        </div>
+        <div id="game-desc" class="hint"></div>
+        <div id="game-options"></div>
+        <div class="form-group">
+          <label>Handicap Mode</label>
+          <select id="handicap-mode">
+            <option value="full">Full Handicap (off low man)</option>
+            <option value="80pct">80% Handicap (off low man)</option>
+            <option value="none">No Handicaps (scratch)</option>
+          </select>
+        </div>
+      </section>
+
+      <button id="start-btn" class="btn primary large">🏁 Start Round</button>
+    </div>
+
+    <!-- Scoring Screen -->
+    <div id="scoring-screen" class="hidden">
+      <div class="scoring-nav sticky-hole-header">
+        <button id="prev-hole" class="btn small">◀</button>
+        <div id="hole-indicator"></div>
+        <button id="next-hole" class="btn small">▶</button>
+      </div>
+      <div class="hole-dots" id="hole-dots"></div>
+      <div id="stroke-summary" class="card collapsible" onclick="this.classList.toggle('collapsed')"></div>
+
+      <div id="hole-info" class="card"></div>
+      <div id="score-inputs" class="card"></div>
+      <div id="game-status" class="card"></div>
+
+      <div class="scoring-actions">
+        <button id="undo-btn" class="btn secondary hidden" onclick="doUndo()">↩ Undo</button>
+        <button id="scorecard-btn" class="btn secondary">📋 Scorecard</button>
+        <button id="standings-btn" class="btn secondary">🏆 Standings</button>
+      </div>
+      <button id="finish-btn" class="btn primary large" onclick="finishRound()" style="margin-top:8px">🏁 Finish Round</button>
+    </div>
+
+    <!-- Sticky Leaderboard -->
+    <div id="sticky-leaderboard" class="sticky-lb hidden"></div>
+
+    <!-- Scorecard Modal -->
+    <div id="scorecard-modal" class="modal hidden">
+      <div class="modal-content">
+        <button class="modal-close" onclick="document.getElementById('scorecard-modal').classList.add('hidden')">✕</button>
+        <h2>📋 Full Scorecard</h2>
+        <div id="scorecard-table-wrap"></div>
+      </div>
+    </div>
+
+    <!-- Standings Modal -->
+    <div id="standings-modal" class="modal hidden">
+      <div class="modal-content">
+        <button class="modal-close" onclick="document.getElementById('standings-modal').classList.add('hidden')">✕</button>
+        <h2>🏆 Standings & Payouts</h2>
+        <div id="standings-content"></div>
+      </div>
+    </div>
+
+    <!-- Final Results Modal -->
+    <div id="results-modal" class="modal hidden">
+      <div class="modal-content results-modal-content">
+        <h2>🏁 Final Results</h2>
+        <div id="results-content"></div>
+        <div class="results-actions">
+          <button class="btn primary" onclick="shareResults()">📤 Copy Text</button>
+          <button class="btn primary" onclick="downloadResultsImage()" style="background:linear-gradient(135deg,#1e293b,#334155)">📸 Save Image</button>
+          <button class="btn secondary" onclick="closeFinishRound()">✅ Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="courses.js"></script>
+  <script src="app.js"></script>
+  <script src="firebase-sync.js"></script>
+  <div id="error-toast" class="error-toast hidden"></div>
+</body>
+</html>
