@@ -13,12 +13,13 @@ const COURSE_DB = [
     {name:"Red",rating:69.3,slope:126,yds:5178}
    ],pars:[4,4,4,5,3,4,4,3,5,4,3,4,5,4,3,4,5,4],hdcps:[7,11,3,13,15,1,9,17,5,4,16,10,2,8,18,12,6,14]},
 
-  {name:"Bear Creek Golf Club",city:"Denver",state:"CO",
-   tees:[
-    {name:"Blue",rating:68.2,slope:119,yds:6260},
-    {name:"White",rating:66.5,slope:114,yds:5880},
-    {name:"Red",rating:68.9,slope:116,yds:5380}
-   ],pars:[4,5,4,3,4,4,3,5,4,4,3,4,5,4,4,3,4,5],hdcps:[5,9,3,15,7,1,17,11,13,4,16,8,2,10,6,18,12,14]},
+ {name:"Bear Creek Golf Club",city:"Denver",state:"CO",
+  tees:[
+  {name:"Black",rating:74.0,slope:140,yds:7340},
+  {name:"Gold",rating:72.0,slope:136,yds:6966},
+  {name:"Blue",rating:70.0,slope:131,yds:6555},
+  {name:"White",rating:67.0,slope:123,yds:5753}
+],pars:[5,4,3,4,4,4,3,4,5,4,4,5,3,5,4,4,3,4],hdcps:[11,5,17,1,7,3,15,13,9,16,10,2,12,6,14,4,18,8]},
 
   {name:"Broken Tee Golf Course",city:"Englewood",state:"CO",
    tees:[
