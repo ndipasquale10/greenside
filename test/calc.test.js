@@ -598,6 +598,45 @@ assertZeroSum('calcWolfMoney', 'Wolf concede zero-sum (5p 2v3)');
 loadState(freshStateLiteral({ players: _W5, gameType: 'wolf', holeCount: 1, scores: {}, wolfHoles: { 0: { wolf: 0, partners: [1], hammers: 0, conceded: 'sheep' } }, gameOpts: { wolfVal: 1 } }));
 assertWolf([2, 1, -1, -1, -1], '5p 2v3 field concedes: three each pay $1, winning pair splits the $3 pot');
 
+// --- A betting hole needs somebody on both sides of it. -------------------
+// With a two-player roster the wolf can take the only opponent as partner,
+// which leaves the field empty. Scoring such a hole paid nobody (harmless),
+// but CONCEDING it charged both players with nobody to collect -- $10 simply
+// destroyed on a 2-player $5 hole. The fixed-pairs code paths already guarded
+// an empty field; the ordinary ones did not.
+console.log('Wolf: a hole with an empty side settles nothing (calcWolfMoney)');
+(() => {
+  const one = { holeCount: 1, handicapMode: 'none', pars: Array(18).fill(4),
+    hdcps: Array.from({ length: 18 }, (_, i) => i + 1), gameType: 'wolf' };
+  [['conceded', { wolf: 0, partners: [1], hammers: 0, conceded: 'wolf' }],
+   ['conceded by field', { wolf: 0, partners: [1], hammers: 0, conceded: 'field' }],
+   ['scored', { wolf: 0, partners: [1], hammers: 0 }]].forEach(([label, wh]) => {
+    loadState(freshStateLiteral(Object.assign({}, one, { players: _P2,
+      scores: scoresFor([[4], [5]]), wolfHoles: { 0: wh }, gameOpts: { wolfVal: 5 } })));
+    const r = call('calcWolfMoney'), sum = r.reduce((a, b) => a + b, 0);
+    if (Math.abs(sum) < 1e-9) { pass++; console.log(`  ok - 2p wolf+partner, ${label}: nets to zero  [${r.join(', ')}]`); }
+    else { fail++; console.log(`  FAIL - 2p wolf+partner, ${label}: sum=${sum}  [${r.join(', ')}]`); }
+  });
+})();
+
+// --- Vegas needs four seats. ----------------------------------------------
+// The team pairing defaults to [[0,1],[2,3]]. On a shorter roster those
+// missing seats made every combined number NaN, which spread to every payout
+// and was persisted, and writing a[2]/a[3] grew the result past the roster.
+// Setup refuses a Vegas round without exactly four players, but a stored round
+// whose roster no longer matches still reaches the calculator.
+console.log('Vegas: a roster that does not cover both teams settles nothing (calcVegasMoney)');
+[2, 3].forEach((n) => {
+  const players = Array.from({ length: n }, (_, i) => ({ name: String.fromCharCode(65 + i), hdcp: 0 }));
+  loadState(freshStateLiteral({ players, gameType: 'vegas', holeCount: 1, handicapMode: 'none',
+    pars: Array(18).fill(4), hdcps: Array.from({ length: 18 }, (_, i) => i + 1),
+    scores: scoresFor(players.map((_, i) => [4 + i])), gameOpts: { vegasVal: 1 } }));
+  const r = call('calcVegasMoney');
+  const ok = r.length === n && r.every((v) => Number.isFinite(v)) && Math.abs(r.reduce((a, b) => a + b, 0)) < 1e-9;
+  if (ok) { pass++; console.log(`  ok - ${n} players: finite, roster-sized, nets to zero  [${r.join(', ')}]`); }
+  else { fail++; console.log(`  FAIL - ${n} players: [${r.join(', ')}] (length ${r.length}, expected ${n})`); }
+});
+
 // --- Nassau automatic presses fire once per 2-down event, not once per hole. ---
 // A press starts one new bet for the rest of the segment when a player goes 2
 // down. The trigger used to be level-based, so a player who merely STAYED 2
