@@ -598,6 +598,24 @@ assertZeroSum('calcWolfMoney', 'Wolf concede zero-sum (5p 2v3)');
 loadState(freshStateLiteral({ players: _W5, gameType: 'wolf', holeCount: 1, scores: {}, wolfHoles: { 0: { wolf: 0, partners: [1], hammers: 0, conceded: 'sheep' } }, gameOpts: { wolfVal: 1 } }));
 assertWolf([2, 1, -1, -1, -1], '5p 2v3 field concedes: three each pay $1, winning pair splits the $3 pot');
 
+// --- Fractional stakes must not invent money. The uneven split pays in whole
+// dollars while the pot is whole dollars (asserted above), but the stake inputs
+// take decimals -- $2.50/point is an ordinary bet. The split used to floor the
+// pot to dollars and then treat the leftover DOLLARS as a COUNT of winners, so
+// 2 winners over 3 losers at $2.50 paid out $8 against $7.50 collected: fifty
+// cents conjured on every uneven hole, all round. A fractional pot splits in
+// cents instead, and stays exactly zero-sum. ---
+console.log('Wolf: uneven teams stay zero-sum on fractional stakes (no money invented)');
+[
+  [2.5, '2.50'], [1.5, '1.50'], [3.33, '3.33'], [0.25, '0.25'], [7.5, '7.50'],
+].forEach(([val, label]) => {
+  // 5 players, 2v3: three losers pay `val` each, the winning pair split the pot.
+  loadState(freshStateLiteral({ players: _W5, gameType: 'wolf', holeCount: 1, scores: scoresFor([[3], [4], [5], [5], [5]]), wolfHoles: { 0: { wolf: 0, partners: [1], hammers: 0 } }, gameOpts: { wolfVal: val } }));
+  const r = call('calcWolfMoney'), sum = r.reduce((x, y) => x + y, 0);
+  if (Math.abs(sum) < 1e-9) { pass++; console.log(`  ok - $${label}/point 2v3 nets to zero  [${r.join(', ')}]`); }
+  else { fail++; console.log(`  FAIL - $${label}/point 2v3 sum=${sum} not zero  [${r.join(', ')}]`); }
+});
+
 // --- Uneven teams: the per-player stake for each side is configurable via
 // gameOpts.wolfTeamVal (the smaller/outnumbered team) and gameOpts.fieldVal
 // (the larger team), set from the two Home Screen inputs. The losing side pays
