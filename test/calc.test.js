@@ -598,6 +598,52 @@ assertZeroSum('calcWolfMoney', 'Wolf concede zero-sum (5p 2v3)');
 loadState(freshStateLiteral({ players: _W5, gameType: 'wolf', holeCount: 1, scores: {}, wolfHoles: { 0: { wolf: 0, partners: [1], hammers: 0, conceded: 'sheep' } }, gameOpts: { wolfVal: 1 } }));
 assertWolf([2, 1, -1, -1, -1], '5p 2v3 field concedes: three each pay $1, winning pair splits the $3 pot');
 
+// --- Nassau automatic presses fire once per 2-down event, not once per hole. ---
+// A press starts one new bet for the rest of the segment when a player goes 2
+// down. The trigger used to be level-based, so a player who merely STAYED 2
+// down minted a fresh press every remaining hole, and two players down on the
+// same hole pushed two identical segments that each settled. A $5 Nassau with
+// $5 presses produced $375 of action against a $30 base. It stays zero-sum
+// either way -- the bug is that nobody agreed to those stakes.
+console.log('Nassau: an automatic press fires once per 2-down event (calcNassauMoney)');
+(() => {
+  const nine = { holeCount: 9, holeStart: 0, handicapMode: 'none',
+    pars: Array(18).fill(4), hdcps: Array.from({ length: 18 }, (_, i) => i + 1) };
+  // A pars every hole; B bogeys; C and D double. Everyone trails A by 2+.
+  const cards = scoresFor([Array(9).fill(4), Array(9).fill(5), Array(9).fill(6), Array(9).fill(6)]);
+  const run = (press) => {
+    loadState(freshStateLiteral(Object.assign({}, nine, { players: _P4, gameType: 'nassau',
+      scores: cards, gameOpts: { front: 5, back: 5, overall: 5, press, pressVal: 5 } })));
+    return call('calcNassauMoney');
+  };
+  const off = run(false), on = run(true);
+  const sum = on.reduce((a, b) => a + b, 0);
+  // Base is $30 to A. Presses add a bounded amount, not a per-hole avalanche.
+  const added = on[0] - off[0];
+  if (Math.abs(sum) < 1e-9) { pass++; console.log(`  ok - pressed Nassau still nets to zero  [${on.join(', ')}]`); }
+  else { fail++; console.log(`  FAIL - pressed Nassau sum=${sum}  [${on.join(', ')}]`); }
+  if (added <= off[0]) { pass++; console.log(`  ok - presses add $${added} on top of the $${off[0]} base (was $345)`); }
+  else { fail++; console.log(`  FAIL - presses added $${added}, more than the $${off[0]} base - per-hole re-trigger is back`); }
+})();
+
+// --- Fractional stakes must not invent money. The uneven split pays in whole
+// dollars while the pot is whole dollars (asserted above), but the stake inputs
+// take decimals -- $2.50/point is an ordinary bet. The split used to floor the
+// pot to dollars and then treat the leftover DOLLARS as a COUNT of winners, so
+// 2 winners over 3 losers at $2.50 paid out $8 against $7.50 collected: fifty
+// cents conjured on every uneven hole, all round. A fractional pot splits in
+// cents instead, and stays exactly zero-sum. ---
+console.log('Wolf: uneven teams stay zero-sum on fractional stakes (no money invented)');
+[
+  [2.5, '2.50'], [1.5, '1.50'], [3.33, '3.33'], [0.25, '0.25'], [7.5, '7.50'],
+].forEach(([val, label]) => {
+  // 5 players, 2v3: three losers pay `val` each, the winning pair split the pot.
+  loadState(freshStateLiteral({ players: _W5, gameType: 'wolf', holeCount: 1, scores: scoresFor([[3], [4], [5], [5], [5]]), wolfHoles: { 0: { wolf: 0, partners: [1], hammers: 0 } }, gameOpts: { wolfVal: val } }));
+  const r = call('calcWolfMoney'), sum = r.reduce((x, y) => x + y, 0);
+  if (Math.abs(sum) < 1e-9) { pass++; console.log(`  ok - $${label}/point 2v3 nets to zero  [${r.join(', ')}]`); }
+  else { fail++; console.log(`  FAIL - $${label}/point 2v3 sum=${sum} not zero  [${r.join(', ')}]`); }
+});
+
 // --- Uneven teams: the per-player stake for each side is configurable via
 // gameOpts.wolfTeamVal (the smaller/outnumbered team) and gameOpts.fieldVal
 // (the larger team), set from the two Home Screen inputs. The losing side pays
