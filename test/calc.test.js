@@ -480,6 +480,23 @@ loadState(freshStateLiteral({
 }));
 assertEqual(call('calcNassauMoney'), [16, 16, -16, -16], 'team0 wins the hole-count 2-1 on both the front and overall bets ($5+$3 x2 members)');
 
+console.log('Nassau: the 2v2 running-money detail names the whole leading team, not one member (Bug: dropped teammate)');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }, { name: 'D', hdcp: 0 }],
+  holeCount: 3,
+  scores: scoresFor([
+    [4, 5, 4],
+    [5, 5, 4],
+    [5, 4, 5],
+    [5, 5, 5],
+  ]),
+  gameOpts: { front: 5, back: 0, overall: 3, press: false, nassauTeams: true, nassauTeamRoster: [[0, 1], [2, 3]] },
+}));
+call('calcNassauMoney'); // populates state._nassauBets that the detail view reads
+const teamDetail = call('renderNassauDetail');
+assertEqual(/A &amp; B|A & B/.test(teamDetail), true, 'team detail lists both winning-team members (A & B), not a lone player');
+assertEqual(/>\s*A 1 UP\s*</.test(teamDetail), false, 'team detail no longer reports a single individual as the segment leader');
+
 console.log('Sixes: rotating partners settle each 6-hole segment via the shared settleTeamSegment helper');
 loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }, { name: 'D', hdcp: 0 }],
