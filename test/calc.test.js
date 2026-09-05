@@ -480,6 +480,23 @@ loadState(freshStateLiteral({
 }));
 assertEqual(call('calcNassauMoney'), [16, 16, -16, -16], 'team0 wins the hole-count 2-1 on both the front and overall bets ($5+$3 x2 members)');
 
+console.log('Nassau: the 2v2 running-money detail names the whole leading team, not one member (Bug: dropped teammate)');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }, { name: 'D', hdcp: 0 }],
+  holeCount: 3,
+  scores: scoresFor([
+    [4, 5, 4],
+    [5, 5, 4],
+    [5, 4, 5],
+    [5, 5, 5],
+  ]),
+  gameOpts: { front: 5, back: 0, overall: 3, press: false, nassauTeams: true, nassauTeamRoster: [[0, 1], [2, 3]] },
+}));
+call('calcNassauMoney'); // populates state._nassauBets that the detail view reads
+const teamDetail = call('renderNassauDetail');
+assertEqual(/A &amp; B|A & B/.test(teamDetail), true, 'team detail lists both winning-team members (A & B), not a lone player');
+assertEqual(/>\s*A 1 UP\s*</.test(teamDetail), false, 'team detail no longer reports a single individual as the segment leader');
+
 console.log('Sixes: rotating partners settle each 6-hole segment via the shared settleTeamSegment helper');
 loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }, { name: 'D', hdcp: 0 }],
@@ -909,6 +926,33 @@ loadState(freshStateLiteral({ players: _P4, gameType: 'nassau', holeCount: 3, sc
 const _rtN = call('computeRunningTotals');
 assertEqual(_rtN[_rtN.length - 1].totals, call('calcMoney').map((v) => +v.toFixed(2)), 'team Nassau: final running totals equal calcMoney()');
 assertEqual(JSON.parse(vm.runInContext('JSON.stringify(state.scores)', context))[0][2], 4, 'scores restored after running-total computation');
+
+// --- computeHoleMoney: segment-settled Nassau must attribute money hole-by-hole ---
+// The leave-one-out holeDelta returns 0 for every hole of a segment bet (removing
+// one hole rarely flips the segment winner), so the Hole-by-Hole Money table read
+// all zeros while real money moved. Team Nassau must show the swing, keep teammates
+// moving together, stay zero-sum per hole, and total to calcMoney().
+console.log('computeHoleMoney: 2v2 team Nassau attributes money hole-by-hole (not all zeros)');
+loadState(freshStateLiteral({
+  players: _P4,
+  gameType: 'nassau',
+  holeCount: 6,
+  scores: scoresFor([[4, 5, 4, 4, 5, 4], [5, 4, 5, 5, 4, 5], [4, 6, 4, 4, 6, 4], [6, 5, 6, 6, 5, 6]]),
+  gameOpts: { front: 5, back: 0, overall: 3, press: false, nassauTeams: true, nassauTeamRoster: [[0, 2], [1, 3]] },
+}));
+const _final = call('calcNassauMoney');
+const _hm = call('computeHoleMoney');
+const _colTot = [0, 0, 0, 0];
+_hm.forEach(({ deltas }) => deltas.forEach((v, i) => { _colTot[i] += v; }));
+assertEqual(_hm.some(({ deltas }) => deltas.some((v) => Math.abs(v) > 0.005)), true, 'at least one hole shows money moving (table is not all zeros)');
+assertEqual(_hm.every(({ deltas }) => Math.abs(deltas[0] - deltas[2]) < 1e-9 && Math.abs(deltas[1] - deltas[3]) < 1e-9), true, 'teammates (0&2, 1&3) move together on every hole');
+assertEqual(_hm.every(({ deltas }) => Math.abs(deltas.reduce((a, b) => a + b, 0)) < 1e-9), true, 'each hole is zero-sum');
+assertEqual(_colTot.map((v) => +v.toFixed(2)), _final.map((v) => +v.toFixed(2)), 'hole-by-hole columns total to the final Nassau money');
+// The per-hole result overlay reuses computeHoleMoney to show the swing; make sure
+// the segment-aware money block renders for team Nassau without throwing.
+let _shrOk = true;
+try { call('showHoleResult', 5, [0, 0, 0, 0]); } catch (_e) { _shrOk = false; }
+assertEqual(_shrOk, true, 'showHoleResult renders a team Nassau hole (with money-swing block) without throwing');
 
 // --- computeSettlement: minimal set of payments that clears every net ---
 console.log('computeSettlement: greedy min-cash-flow settlement');
