@@ -954,6 +954,44 @@ let _shrOk = true;
 try { call('showHoleResult', 5, [0, 0, 0, 0]); } catch (_e) { _shrOk = false; }
 assertEqual(_shrOk, true, 'showHoleResult renders a team Nassau hole (with money-swing block) without throwing');
 
+// computeHoleMoney must be additive for EVERY game, so the scorecard OUT/IN/TOT
+// columns reconcile with the running-money banner. These previously failed:
+// Sixes settles per 6-hole segment (all-zero holeDelta), and Skins carry-overs
+// make a leave-one-out diff non-additive.
+function holeMoneyColumnsMatchCalc(label) {
+  call('calcMoney'); // warm/settle
+  const final = call('calcMoney').map((v) => +v.toFixed(2));
+  const rows = call('computeHoleMoney');
+  const cols = final.map(() => 0);
+  let zeroSum = true;
+  rows.forEach(({ deltas }) => {
+    deltas.forEach((v, i) => { cols[i] += v; });
+    if (Math.abs(deltas.reduce((a, b) => a + b, 0)) > 1e-9) zeroSum = false;
+  });
+  assertEqual(zeroSum, true, `${label}: every hole is zero-sum`);
+  assertEqual(cols.map((v) => +v.toFixed(2)), final, `${label}: hole-by-hole columns total to calcMoney()`);
+}
+
+console.log('computeHoleMoney: Sixes attributes segment money hole-by-hole (was all zeros)');
+loadState(freshStateLiteral({
+  players: _P4,
+  gameType: 'sixes',
+  holeCount: 18,
+  scores: scoresFor([Array(18).fill(4), Array(18).fill(5), Array(18).fill(4), Array(18).fill(6)]),
+  gameOpts: { sixesVal: 5 },
+}));
+holeMoneyColumnsMatchCalc('Sixes');
+
+console.log('computeHoleMoney: Skins carry-over stays additive across holes');
+loadState(freshStateLiteral({
+  players: _P4,
+  gameType: 'skins',
+  holeCount: 9,
+  scores: scoresFor([[3, 4, 4, 4, 4, 4, 4, 4, 4], [4, 3, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4, 4, 4, 3]]),
+  gameOpts: { skinVal: 2, carry: true },
+}));
+holeMoneyColumnsMatchCalc('Skins (carry)');
+
 // --- computeSettlement: minimal set of payments that clears every net ---
 console.log('computeSettlement: greedy min-cash-flow settlement');
 const _st1 = call('computeSettlement', [48, 9, -21, -36]);
