@@ -948,6 +948,11 @@ assertEqual(_hm.some(({ deltas }) => deltas.some((v) => Math.abs(v) > 0.005)), t
 assertEqual(_hm.every(({ deltas }) => Math.abs(deltas[0] - deltas[2]) < 1e-9 && Math.abs(deltas[1] - deltas[3]) < 1e-9), true, 'teammates (0&2, 1&3) move together on every hole');
 assertEqual(_hm.every(({ deltas }) => Math.abs(deltas.reduce((a, b) => a + b, 0)) < 1e-9), true, 'each hole is zero-sum');
 assertEqual(_colTot.map((v) => +v.toFixed(2)), _final.map((v) => +v.toFixed(2)), 'hole-by-hole columns total to the final Nassau money');
+// The per-hole result overlay reuses computeHoleMoney to show the swing; make sure
+// the segment-aware money block renders for team Nassau without throwing.
+let _shrOk = true;
+try { call('showHoleResult', 5, [0, 0, 0, 0]); } catch (_e) { _shrOk = false; }
+assertEqual(_shrOk, true, 'showHoleResult renders a team Nassau hole (with money-swing block) without throwing');
 
 // --- computeSettlement: minimal set of payments that clears every net ---
 console.log('computeSettlement: greedy min-cash-flow settlement');
