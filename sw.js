@@ -1,4 +1,4 @@
-const CACHE_NAME = "thepress-shell-v7";
+const CACHE_NAME = "thepress-shell-v8";
 const STATIC_ASSETS = [
   "./manifest.json",
   "./logo.png",
