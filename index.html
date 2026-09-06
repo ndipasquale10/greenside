@@ -48,7 +48,7 @@ h1,h2,.brand-seal span,.welcome-title,.games-title,.es-title,.hole-big{font-synt
 .strokes-badge{background:var(--surface-3);}
 /* The resume card is the hero; it earns that with an accent edge, not a second surface. */
 #resume-card .resume-card-inner{border-color:var(--accent);}
-</style></head><body>
+.er-section{margin-bottom:var(--sp-7);}.er-head{font-size:var(--fs-2xs);font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:var(--sp-4);}.er-label{display:block;font-size:var(--fs-2xs);font-weight:700;color:var(--muted);margin-bottom:var(--sp-3);}.er-input{width:100%;padding:var(--sp-4) var(--sp-6);border:var(--bw-strong) solid var(--rule);border-radius:var(--radius);font-size:var(--fs-md);font-family:inherit;background:var(--surface);color:var(--ink);font-weight:600;box-sizing:border-box;}.er-player-row{display:flex;align-items:center;gap:var(--sp-4);margin-bottom:var(--sp-4);}.er-pname{flex:1;min-width:0;padding:var(--sp-4) var(--sp-6);border:var(--bw-strong) solid var(--rule);border-radius:var(--radius);font-size:var(--fs-md);font-family:inherit;background:var(--surface);color:var(--ink);font-weight:600;}.er-hdcp-wrap{display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-2xs);font-weight:700;color:var(--muted);white-space:nowrap;}.er-phdcp{width:60px;padding:var(--sp-4);border:var(--bw) solid var(--rule-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink);font-weight:700;text-align:center;}.er-stake-row{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);margin-bottom:var(--sp-4);font-size:var(--fs-sm);font-weight:600;color:var(--ink);}.er-stake-row input{width:88px;padding:var(--sp-3) var(--sp-4);border:var(--bw) solid var(--rule-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink);font-weight:700;text-align:right;}</style></head><body>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -300,6 +300,7 @@ h1,h2,.brand-seal span,.welcome-title,.games-title,.es-title,.hole-big{font-synt
         <button id="strokes-btn" class="btn secondary" onclick="showStrokes()">Strokes</button>
         <button id="scorecard-btn" class="btn secondary">Scorecard</button>
         <button id="standings-btn" class="btn secondary">Standings</button>
+        <button id="edit-round-btn" class="btn secondary" onclick="showEditRound()">Edit</button>
       </div>
       <button id="finish-btn" class="btn secondary large" onclick="finishRound()" style="margin-top:8px">Finish Round</button>
     </div>
@@ -348,6 +349,19 @@ h1,h2,.brand-seal span,.welcome-title,.games-title,.es-title,.hole-big{font-synt
         <h2>Full Scorecard</h2>
         <div id="scorecard-table-wrap"></div>
         <button class="btn primary" onclick="shareScorecard()" style="width:100%;margin-top:12px">Share Scorecard</button>
+      </div>
+    </div>
+
+    <!-- Edit Round Modal -->
+    <div id="edit-round-modal" class="modal hidden" role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-content">
+        <button class="modal-close" aria-label="Close" onclick="closeModal('edit-round-modal')">✕</button>
+        <h2>Edit Round</h2>
+        <div id="edit-round-content"></div>
+        <div class="app-dialog-actions" style="margin-top:16px">
+          <button class="btn secondary" type="button" onclick="closeModal('edit-round-modal')" style="flex:1">Cancel</button>
+          <button class="btn primary" type="button" onclick="saveEditRound()" style="flex:1">Save Changes</button>
+        </div>
       </div>
     </div>
   </div>
@@ -504,6 +518,58 @@ const e=document.getElementById("players-list");e.innerHTML="";const t=getSavedP
   if("vegas"===g)return"$"+(o.vegasVal||0)+" / point";
   if("sixes"===g)return"$"+(o.sixesVal||0)+" / segment";
   return""
+}
+/* Edit Round — the roster count and order stay locked once a round starts
+   (every score is keyed to a player index), but names, handicaps, the round
+   name, and the money stakes are safe to change mid-round: net scores and all
+   payouts are recomputed from these values, so editing then re-rendering keeps
+   the running money correct. */
+function editRoundStakeFields(){
+  const g=state.gameType,o=state.gameOpts||{},f=[];
+  const add=(k,l)=>{if(o[k]!=null)f.push({key:k,label:l,val:o[k]})};
+  if("nassau"===g){add("front","Front 9"),add("back","Back 9"),add("overall","Overall"),o.press&&add("pressVal","Press")}
+  else if("skins"===g)add("skinVal","Per skin");
+  else if("match"===g){"nassau"===o.matchFormat?(add("matchFront","Front 9"),add("matchBack","Back 9"),add("matchOverall","Overall")):(add("holeVal","Per hole"),add("matchPressVal","Press"))}
+  else if("stableford"===g)add("ptVal","Per point");
+  else if("bingo"===g)add("ptVal","Per point");
+  else if("dots"===g)add("dotVal","Per dot");
+  else if("wolf"===g){add("wolfVal","Per point"),add("wolfTeamVal","Team point"),add("fieldVal","Field point")}
+  else if("vegas"===g)add("vegasVal","Per point");
+  else if("snake"===g)add("potVal","Pot");
+  else if("sixes"===g)add("sixesVal","Per segment");
+  return f
+}
+function showEditRound(){
+  if(isSpectator)return void showToast("You're watching — editing is disabled.",{type:"info"});
+  if(!state.started)return void showToast("Start a round first.",{type:"info"});
+  const el=document.getElementById("edit-round-content");if(!el)return;
+  let s='<div class="er-section"><label class="er-label" for="er-course">Round name</label><input type="text" id="er-course" class="er-input" value="'+esc(state.course||"")+'" maxlength="40" placeholder="Round"></div>';
+  s+='<div class="er-section"><div class="er-head">Players</div><div class="hint" style="margin:-2px 0 8px">Names and handicaps only — you can’t add, remove, or reorder players mid-round.</div>';
+  state.players.forEach((p,i)=>{s+='<div class="er-player-row"><input type="text" class="er-pname" data-idx="'+i+'" value="'+esc(p.name)+'" maxlength="24" placeholder="Player '+(i+1)+'" aria-label="Player '+(i+1)+' name"><label class="er-hdcp-wrap">Hdcp <input type="number" inputmode="decimal" class="er-phdcp" data-idx="'+i+'" value="'+p.hdcp+'" min="-10" max="54" step="0.1" aria-label="Player '+(i+1)+' handicap"></label></div>'});
+  s+="</div>";
+  const stakes=editRoundStakeFields();
+  if(stakes.length){s+='<div class="er-section"><div class="er-head">'+esc(GAME_NAMES[state.gameType]||state.gameType||"")+' stakes ($)</div>';stakes.forEach(f=>{s+='<label class="er-stake-row"><span>'+esc(f.label)+'</span><input type="number" inputmode="decimal" class="er-stake" data-key="'+f.key+'" value="'+f.val+'" min="1" step="1"></label>'});s+="</div>"}
+  const sb=state.sideBets||{},sbLabels={skins:"Skins (per skin)",snake:"Snake (pot)",junk:"Junk / Dots (per dot)"},sbKeys=Object.keys(SIDE_BET_DEFAULTS).filter(k=>sb[k]&&sb[k].on);
+  if(sbKeys.length){s+='<div class="er-section"><div class="er-head">Side bets ($)</div>';sbKeys.forEach(k=>{s+='<label class="er-stake-row"><span>'+esc(sbLabels[k]||k)+'</span><input type="number" inputmode="decimal" class="er-sb" data-key="'+k+'" value="'+(sb[k].val||0)+'" min="0" step="1"></label>'});s+="</div>"}
+  el.innerHTML=s;
+  document.getElementById("edit-round-modal").classList.remove("hidden");
+  openModalA11y("edit-round-modal")
+}
+function saveEditRound(){
+  if(isSpectator||!state.started)return;
+  const nameInputs=[...document.querySelectorAll("#edit-round-content .er-pname")],names=nameInputs.map(i=>i.value.trim());
+  if(names.some(n=>!n))return void showToast("Every player needs a name.",{type:"error"});
+  if(new Set(names.map(n=>n.toLowerCase())).size!==names.length)return void showToast("Player names must be unique.",{type:"error"});
+  nameInputs.forEach(inp=>{const i=+inp.dataset.idx;state.players[i]&&(state.players[i].name=inp.value.trim())});
+  document.querySelectorAll("#edit-round-content .er-phdcp").forEach(inp=>{const i=+inp.dataset.idx,v=+inp.value;state.players[i]&&(state.players[i].hdcp=Math.max(-10,Math.min(54,Number.isNaN(v)?0:Math.round(10*v)/10)),state.players[i]._hdcpTouched=!0)});
+  const cn=document.getElementById("er-course");cn&&(state.course=cn.value.trim()||"Round");
+  state.gameOpts=state.gameOpts||{};
+  document.querySelectorAll("#edit-round-content .er-stake").forEach(inp=>{state.gameOpts[inp.dataset.key]=Math.max(1,+inp.value||1)});
+  document.querySelectorAll("#edit-round-content .er-sb").forEach(inp=>{const k=inp.dataset.key;state.sideBets&&state.sideBets[k]&&(state.sideBets[k].val=Math.max(0,+inp.value||0))});
+  invalidateHdcpCache(),invalidateMoneyCache(),saveCurrentRound(),syncEditedRoundLive(),renderStrokeSummary(),renderHole(),closeModal("edit-round-modal"),showToast("Round updated.",{type:"success"})
+}
+function syncEditedRoundLive(){
+  try{state.liveId&&"undefined"!=typeof db&&db&&currentUser&&db.collection("liveRounds").doc(state.liveId).update({course:state.course,players:state.players,gameOpts:state.gameOpts,sideBets:state.sideBets||defaultSideBets(),hdcps:state.hdcps,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{})}catch(e){}
 }
 // Fill each card with its real rules copy once, so the picker teaches the game.
 function dockGameOptions(){
