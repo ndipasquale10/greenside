@@ -1170,5 +1170,53 @@ const _unevenAt = (n) => {
 assertEqual(_unevenAt(0), false, 'empty roster is not uneven -- so these fields cannot be configured before players exist');
 assertEqual(_unevenAt(3), false, '3 players is wolf-vs-two, not an uneven team split');
 
+// --- Round superlatives: descriptive per-round "awards" on the finish screen ---
+// These read the same scores/pars/money the results already show, so they must
+// never invent a standout that isn't there, must respect holeStart labelling,
+// and must stay quiet when there's nothing to celebrate (one player / no scores).
+console.log('roundSuperlatives: per-round awards derive only from the round already played');
+
+const _sup = (state) => {
+  loadState(freshStateLiteral(state));
+  return call('roundSuperlativesHTML');
+};
+const _has = (html, award, name) =>
+  new RegExp(award.replace(/[-/]/g, '\\$&') + '</div>[\\s\\S]*?<div class="sup-winner">[\\s\\S]*?<span class="sup-name">' + name)
+    .test(html);
+
+// Par-4 nine. Ann is low & birdie-heavy, Bo blows up on hole 5, Cy is all pars.
+const _supPlayers = [{ name: 'Ann Lee', color: 0 }, { name: 'Bo Ray', color: 1 }, { name: 'Cy Fox', color: 2 }];
+const _supPars = Array(9).fill(4);
+const _supScores = scoresFor([
+  [3, 3, 4, 3, 4, 4, 5, 4, 4], // Ann: 3 birdies, lowest gross
+  [4, 4, 4, 4, 8, 4, 4, 4, 4], // Bo: +4 blow-up on hole 5
+  [4, 4, 4, 4, 4, 4, 4, 4, 4], // Cy: nine straight pars
+]);
+const _skinsOut = _sup({ players: _supPlayers, pars: _supPars, scores: _supScores, hdcps: Array.from({ length: 9 }, (_, i) => i + 1), gameType: 'skins', currentHole: 8, holeCount: 9, holeStart: 0 });
+assertEqual(/superlatives-wrap/.test(_skinsOut), true, 'a finished multiplayer round produces a superlatives card');
+assertEqual(/superlatives-note/.test(_skinsOut), true, 'the card carries a short description of what the superlatives are');
+assertEqual(/Medalist<\/div><div class="sup-desc">Lowest score of the day/.test(_skinsOut), true, 'each award carries a mini description of what it means');
+assertEqual(/sup-game">Skins/.test(_skinsOut), true, 'the card names the game that was played');
+assertEqual(_has(_skinsOut, 'Medalist', 'Ann Lee'), true, 'Medalist is the lowest gross of the day');
+assertEqual(_has(_skinsOut, 'Birdie Hunter', 'Ann Lee'), true, 'Birdie Hunter is the most birdies-or-better');
+assertEqual(_has(_skinsOut, 'On a Heater', 'Cy Fox'), true, 'On a Heater is the longest par-or-better run');
+assertEqual(/Blow-Up of the Day<\/div>[\s\S]*?<div class="sup-winner">[\s\S]*?Bo Ray[\s\S]*?\+4 on hole 5/.test(_skinsOut), true, 'Blow-Up names the right player, amount and hole');
+assertEqual(/Skin Collector/.test(_skinsOut), true, 'a skins round awards the Skin Collector');
+
+// Game "none": no money awards, no game label, but scoring awards still stand.
+const _noneOut = _sup({ players: [{ name: 'Ann', color: 0 }, { name: 'Bo', color: 1 }], pars: _supPars, scores: scoresFor([[3, 4, 4, 4, 4, 4, 4, 4, 4], [5, 4, 4, 4, 4, 4, 4, 4, 4]]), gameType: 'none', currentHole: 8, holeCount: 9, holeStart: 0 });
+assertEqual(/sup-game/.test(_noneOut), false, 'a score-only round shows no game label');
+assertEqual(/Biggest Swing/.test(_noneOut), false, 'a score-only round has no money-swing award');
+assertEqual(/Medalist/.test(_noneOut), true, 'a score-only round still crowns a Medalist');
+
+// holeStart offsets the hole labels (a back-nine round starts at hole 10).
+const _backOut = _sup({ players: [{ name: 'A', color: 0 }, { name: 'B', color: 1 }], pars: _supPars, scores: scoresFor([[4, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 8, 4, 4, 4, 4, 4, 4]]), gameType: 'none', currentHole: 8, holeCount: 9, holeStart: 9 });
+assertEqual(/\+4 on hole 12/.test(_backOut), true, 'blow-up hole labels respect holeStart');
+
+// Degenerate rounds stay quiet rather than rendering an empty card.
+assertEqual(_sup({ players: [{ name: 'Solo', color: 0 }], pars: _supPars, scores: scoresFor([[4, 4, 4, 4, 4, 4, 4, 4, 4]]), gameType: 'none', holeCount: 9 }), '', 'a solo round produces no superlatives');
+assertEqual(_sup({ players: [{ name: 'A', color: 0 }, { name: 'B', color: 1 }], pars: _supPars, scores: {}, gameType: 'none', holeCount: 9 }), '', 'a round with no scores produces no superlatives');
+
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);
