@@ -1194,6 +1194,7 @@ const _supScores = scoresFor([
 ]);
 const _skinsOut = _sup({ players: _supPlayers, pars: _supPars, scores: _supScores, hdcps: Array.from({ length: 9 }, (_, i) => i + 1), gameType: 'skins', currentHole: 8, holeCount: 9, holeStart: 0 });
 assertEqual(/superlatives-wrap/.test(_skinsOut), true, 'a finished multiplayer round produces a superlatives card');
+assertEqual(/superlatives-note/.test(_skinsOut), true, 'the card carries a short description of what the superlatives are');
 assertEqual(/sup-game">Skins/.test(_skinsOut), true, 'the card names the game that was played');
 assertEqual(_has(_skinsOut, 'Medalist', 'Ann Lee'), true, 'Medalist is the lowest gross of the day');
 assertEqual(_has(_skinsOut, 'Birdie Hunter', 'Ann Lee'), true, 'Birdie Hunter is the most birdies-or-better');
