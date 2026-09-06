@@ -1181,7 +1181,7 @@ const _sup = (state) => {
   return call('roundSuperlativesHTML');
 };
 const _has = (html, award, name) =>
-  new RegExp(award.replace(/[-/]/g, '\\$&') + '</div><div class="sup-winner">[\\s\\S]*?<span class="sup-name">' + name)
+  new RegExp(award.replace(/[-/]/g, '\\$&') + '</div>[\\s\\S]*?<div class="sup-winner">[\\s\\S]*?<span class="sup-name">' + name)
     .test(html);
 
 // Par-4 nine. Ann is low & birdie-heavy, Bo blows up on hole 5, Cy is all pars.
@@ -1195,11 +1195,12 @@ const _supScores = scoresFor([
 const _skinsOut = _sup({ players: _supPlayers, pars: _supPars, scores: _supScores, hdcps: Array.from({ length: 9 }, (_, i) => i + 1), gameType: 'skins', currentHole: 8, holeCount: 9, holeStart: 0 });
 assertEqual(/superlatives-wrap/.test(_skinsOut), true, 'a finished multiplayer round produces a superlatives card');
 assertEqual(/superlatives-note/.test(_skinsOut), true, 'the card carries a short description of what the superlatives are');
+assertEqual(/Medalist<\/div><div class="sup-desc">Lowest score of the day/.test(_skinsOut), true, 'each award carries a mini description of what it means');
 assertEqual(/sup-game">Skins/.test(_skinsOut), true, 'the card names the game that was played');
 assertEqual(_has(_skinsOut, 'Medalist', 'Ann Lee'), true, 'Medalist is the lowest gross of the day');
 assertEqual(_has(_skinsOut, 'Birdie Hunter', 'Ann Lee'), true, 'Birdie Hunter is the most birdies-or-better');
 assertEqual(_has(_skinsOut, 'On a Heater', 'Cy Fox'), true, 'On a Heater is the longest par-or-better run');
-assertEqual(/Blow-Up of the Day<\/div><div class="sup-winner">[\s\S]*?Bo Ray[\s\S]*?\+4 on hole 5/.test(_skinsOut), true, 'Blow-Up names the right player, amount and hole');
+assertEqual(/Blow-Up of the Day<\/div>[\s\S]*?<div class="sup-winner">[\s\S]*?Bo Ray[\s\S]*?\+4 on hole 5/.test(_skinsOut), true, 'Blow-Up names the right player, amount and hole');
 assertEqual(/Skin Collector/.test(_skinsOut), true, 'a skins round awards the Skin Collector');
 
 // Game "none": no money awards, no game label, but scoring awards still stand.
