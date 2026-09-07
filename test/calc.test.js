@@ -100,7 +100,7 @@ scriptBlocks.forEach((code, i) => {
   }
 });
 
-const required = ['calcVegasMoney', 'calcNassauMoney', 'calcSkins', 'calcBonusMoney', 'addBonus', 'removeBonus', 'getBonusCount', 'getPlayingHandicaps', 'readGameOpts', 'computeScoringStats', 'esc', 'safeParseJSON', 'mergeByName', 'roundNetsToCents', 'sixesSetupValid', 'vegasSetupValid'];
+const required = ['calcVegasMoney', 'calcNassauMoney', 'calcSkins', 'calcBonusMoney', 'addBonus', 'removeBonus', 'getBonusCount', 'getPlayingHandicaps', 'readGameOpts', 'computeScoringStats', 'esc', 'safeParseJSON', 'mergeByName', 'roundNetsToCents', 'sixesSetupValid', 'vegasSetupValid', 'calcBankerMoney'];
 for (const fn of required) {
   if (typeof context[fn] !== 'function') {
     console.error(`FATAL: ${fn} was not found in the loaded script context. Aborting tests.`);
@@ -401,6 +401,29 @@ loadState(freshStateLiteral({
   gameOpts: { ptVal: 2 },
 }));
 assertEqual(call('calcStablefordMoney'), [12, -12], 'A (5 pts) vs B (-1 pt): (5-(-1))*$2 = $12 zero-sum');
+
+console.log('Banker: rotating banker plays each other player heads-up; wins/losses are per-opponent and zero-sum');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 2,
+  // Hole 0 banker = A (0%3): A(4) beats B(5) and C(5) -> A +2, B -1, C -1
+  // Hole 1 banker = B (1%3): B(3) beats A(4) and C(4) -> B +2, A -1, C -1
+  scores: scoresFor([[4, 4], [5, 3], [5, 4]]),
+  gameOpts: { bankerVal: 1 },
+}));
+assertEqual(call('calcBankerMoney'), [1, 1, -2], 'A(+2-1)=+1, B(-1+2)=+1, C(-1-1)=-2: banker rotates by hole and each match settles against the banker');
+
+console.log('Banker: a tie against the banker pushes (no money moves for that pairing)');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  // Hole 0 banker = A: A(4) ties B(4) -> push; A(4) beats C(5) -> A +2, C -2
+  scores: scoresFor([[4], [4], [5]]),
+  gameOpts: { bankerVal: 2 },
+}));
+assertEqual(call('calcBankerMoney'), [2, 0, -2], 'banker pushes the tie with B but collects $2 from C');
 
 console.log('Skins: money formula pays skin-holders from the field proportional to $/skin (calcSkinsMoney)');
 loadState(freshStateLiteral({

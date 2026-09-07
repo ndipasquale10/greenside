@@ -118,7 +118,7 @@ section("Every game settles zero-sum, at every roster size it accepts");
 // --------------------------------------------------------------------------
 const GAMES = [
   "wolf", "nassau", "skins", "match", "stableford",
-  "bingo", "dots", "vegas", "snake", "sixes", "none",
+  "bingo", "dots", "vegas", "snake", "sixes", "banker", "none",
 ];
 // Vegas and Sixes are 4-player formats by rule; the rest take any roster.
 const EXACTLY_FOUR = new Set(["vegas", "sixes"]);
