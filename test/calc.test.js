@@ -134,6 +134,7 @@ function freshStateLiteral(overrides) {
     gameOpts: {},
     bonusPoints: {},
     wolfHoles: {},
+    bankerHoles: {},
     matchPresses: [],
     pairings: [],
     currentHole: 0,
@@ -449,6 +450,40 @@ loadState(freshStateLiteral({
   gameOpts: { bankerVal: 2, bankerTeams: true, bankerTeamRoster: [[0, 1], [2, 3], [4, 5]] },
 }));
 assertEqual(call('calcBankerMoney'), [2, 2, -1, -1, -1, -1], 'banker team A&B win $2 from each of the other two teams (=$4 split $2/each); each losing pair drops $1/player');
+
+console.log('Banker: full 4-hole round settles to the exact per-player dollars, carrying the banker through a tied hole');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }, { name: 'D', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 4,
+  gameOpts: { bankerVal: 2 },
+  scores: scoresFor([
+    [4, 5, 4, 6], // A
+    [5, 3, 4, 5], // B
+    [6, 4, 4, 3], // C
+    [5, 6, 4, 7], // D
+  ]),
+  // Hole 0: banker A (default, hole 1) beats B,C,D -> A +6, others -2 each
+  // Hole 1: banker A (won hole 0). A(5) loses to B(3) & C(4), beats D(6) -> A -2, B +2, C +2, D -2
+  // Hole 2: banker B (won hole 1). Everyone shoots 4 -> all push -> no money; hole is tied
+  // Hole 3: banker carries to B (hole 2 tied). B(5) beats A(6) & D(7), loses to C(3) -> A -2, B +2, C +2, D -2
+  // Totals: A 6-2+0-2=2, B -2+2+0+2=2, C -2+2+0+2=2, D -2-2+0-2=-6
+}));
+assertEqual(call('calcBankerMoney'), [2, 2, 2, -6], 'exact settle across 4 holes with a tied hole carrying the banker forward');
+assertEqual(call('calcBankerMoney').reduce((a, b) => a + b, 0), 0, 'the 4-hole banker round is zero-sum');
+
+console.log('Banker: money is driven by NET score — a handicap stroke pushes hole 0, and the banker (carried on the tie) wins hole 1 on net');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 1 }],
+  gameType: 'banker',
+  holeCount: 2,
+  handicapMode: 'full', // playing hdcps [0,1]; B strokes on hole 0 (stroke index 1) only
+  scores: scoresFor([[4, 4], [5, 5]]),
+  gameOpts: { bankerVal: 2 },
+  // Hole 0 (idx 1): A net 4, B net 5-1=4 -> tie, push. Banker A.
+  // Hole 1 (idx 2): hole 0 tied so banker carries to A. A net 4, B net 5 (no stroke) -> A wins +2/-2
+}));
+assertEqual(call('calcBankerMoney'), [2, -2], 'gross would tie hole 1 too; net gives A the hole because B only gets a stroke on hole 0');
 
 console.log('Skins: money formula pays skin-holders from the field proportional to $/skin (calcSkinsMoney)');
 loadState(freshStateLiteral({
