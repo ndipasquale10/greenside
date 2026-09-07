@@ -96,6 +96,11 @@ const scoreEveryHole = (p) =>
         const w = h % state.players.length;
         state.wolfHoles[h] = { wolf: w, partners: [(w + 1) % state.players.length] };
       }
+      if (state.gameType === "banker" && h === 0) {
+        // Banker's first hole needs an explicit pick; the rest rotate off results.
+        state.bankerHoles = state.bankerHoles || {};
+        state.bankerHoles[0] = 0;
+      }
       for (let i = 0; i < state.players.length; i++) {
         state.scores[i] = state.scores[i] || {};
         state.scores[i][h] = 4 + ((h + i) % 3 === 0 ? 1 : 0);
@@ -118,7 +123,7 @@ section("Every game settles zero-sum, at every roster size it accepts");
 // --------------------------------------------------------------------------
 const GAMES = [
   "wolf", "nassau", "skins", "match", "stableford",
-  "bingo", "dots", "vegas", "snake", "sixes", "none",
+  "bingo", "dots", "vegas", "snake", "sixes", "banker", "none",
 ];
 // Vegas and Sixes are 4-player formats by rule; the rest take any roster.
 const EXACTLY_FOUR = new Set(["vegas", "sixes"]);
