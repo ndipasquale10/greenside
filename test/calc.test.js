@@ -402,17 +402,30 @@ loadState(freshStateLiteral({
 }));
 assertEqual(call('calcStablefordMoney'), [12, -12], 'A (5 pts) vs B (-1 pt): (5-(-1))*$2 = $12 zero-sum');
 
-console.log('Banker: rotating banker plays each other player heads-up; wins/losses are per-opponent and zero-sum');
+console.log("Banker: hole 1's banker is the player who won the previous hole, not a fixed rotation");
 loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
   gameType: 'banker',
   holeCount: 2,
-  // Hole 0 banker = A (0%3): A(4) beats B(5) and C(5) -> A +2, B -1, C -1
-  // Hole 1 banker = B (1%3): B(3) beats A(4) and C(4) -> B +2, A -1, C -1
-  scores: scoresFor([[4, 4], [5, 3], [5, 4]]),
+  // Hole 0 banker = A (default first player): A(4) beats B(5) and C(5) -> A +2, B -1, C -1
+  // Hole 0 winner is A (unique low net), so Hole 1 banker = A again:
+  //   A(4) loses to B(3) -> A -1, B +1; A(4) beats C(5) -> A +1, C -1
+  scores: scoresFor([[4, 4], [5, 3], [5, 5]]),
   gameOpts: { bankerVal: 1 },
 }));
-assertEqual(call('calcBankerMoney'), [1, 1, -2], 'A(+2-1)=+1, B(-1+2)=+1, C(-1-1)=-2: banker rotates by hole and each match settles against the banker');
+assertEqual(call('calcBankerMoney'), [2, 0, -2], 'A stays banker on hole 1 because A won hole 0; A(+2, then 0) = +2, B(-1,+1)=0, C(-1,-1)=-2');
+
+console.log('Banker: a manual per-hole override picks the banker regardless of who won last hole');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 2,
+  scores: scoresFor([[4, 4], [5, 3], [5, 5]]),
+  bankerHoles: { 1: 1 }, // force B as banker on hole 1 even though A won hole 0
+  gameOpts: { bankerVal: 1 },
+}));
+// Hole 0 banker = A: A +2, B -1, C -1. Hole 1 banker = B(3): beats A(4) and C(5) -> B +2, A -1, C -1
+assertEqual(call('calcBankerMoney'), [1, 1, -2], 'override makes B the hole-1 banker: A(+2-1)=+1, B(-1+2)=+1, C(-1-1)=-2');
 
 console.log('Banker: a tie against the banker pushes (no money moves for that pairing)');
 loadState(freshStateLiteral({
@@ -424,6 +437,18 @@ loadState(freshStateLiteral({
   gameOpts: { bankerVal: 2 },
 }));
 assertEqual(call('calcBankerMoney'), [2, 0, -2], 'banker pushes the tie with B but collects $2 from C');
+
+console.log('Banker (2v2v2 teams): banker team plays best-ball vs each other team; the swing splits within each team');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }, { name: 'D', hdcp: 0 }, { name: 'E', hdcp: 0 }, { name: 'F', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  // Teams: [A,B]=best 3, [C,D]=best 4, [E,F]=best 5. Banker = team 0 (default first team).
+  // team0(3) beats team1(4) and team2(5) at $2/team; each side splits over its 2 members.
+  scores: scoresFor([[3], [5], [4], [6], [5], [5]]),
+  gameOpts: { bankerVal: 2, bankerTeams: true, bankerTeamRoster: [[0, 1], [2, 3], [4, 5]] },
+}));
+assertEqual(call('calcBankerMoney'), [2, 2, -1, -1, -1, -1], 'banker team A&B win $2 from each of the other two teams (=$4 split $2/each); each losing pair drops $1/player');
 
 console.log('Skins: money formula pays skin-holders from the field proportional to $/skin (calcSkinsMoney)');
 loadState(freshStateLiteral({
