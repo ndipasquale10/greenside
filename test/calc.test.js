@@ -100,7 +100,7 @@ scriptBlocks.forEach((code, i) => {
   }
 });
 
-const required = ['calcVegasMoney', 'calcNassauMoney', 'calcSkins', 'calcBonusMoney', 'addBonus', 'removeBonus', 'getBonusCount', 'getPlayingHandicaps', 'readGameOpts', 'computeScoringStats', 'esc', 'safeParseJSON', 'mergeByName', 'roundNetsToCents', 'sixesSetupValid', 'vegasSetupValid', 'calcBankerMoney', 'bankerForHole', 'bankerPickMissing', 'bankerPressMult', 'pressBankerGroup', 'pressBankerUnit'];
+const required = ['calcVegasMoney', 'calcNassauMoney', 'calcSkins', 'calcBonusMoney', 'addBonus', 'removeBonus', 'getBonusCount', 'getPlayingHandicaps', 'readGameOpts', 'computeScoringStats', 'esc', 'safeParseJSON', 'mergeByName', 'roundNetsToCents', 'sixesSetupValid', 'vegasSetupValid', 'calcBankerMoney', 'bankerForHole', 'bankerPickMissing', 'bankerScoreFactor', 'bankerPressFactor', 'pressBankerGroup', 'pressBankerUnit'];
 for (const fn of required) {
   if (typeof context[fn] !== 'function') {
     console.error(`FATAL: ${fn} was not found in the loaded script context. Aborting tests.`);
@@ -431,10 +431,11 @@ loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
   gameType: 'banker',
   holeCount: 2,
-  // Hole 0 banker = A (chosen as first banker): A(4) beats B(5) and C(5) -> A +2, B -1, C -1
+  // Scores kept at par-or-worse so no birdie/eagle factor muddies the rotation check.
+  // Hole 0 banker = A (chosen first): A(4) beats B(5) and C(6) -> A +2, B -1, C -1
   // Hole 0 winner is A (unique low net), so Hole 1 banker = A again:
-  //   A(4) loses to B(3) -> A -1, B +1; A(4) beats C(5) -> A +1, C -1
-  scores: scoresFor([[4, 4], [5, 3], [5, 5]]),
+  //   A(5) loses to B(4) -> A -1, B +1; A(5) beats C(6) -> A +1, C -1
+  scores: scoresFor([[4, 5], [5, 4], [6, 6]]),
   bankerHoles: { 0: 0 }, // user picks A to bank the first hole
   gameOpts: { bankerVal: 1 },
 }));
@@ -445,11 +446,11 @@ loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
   gameType: 'banker',
   holeCount: 2,
-  scores: scoresFor([[4, 4], [5, 3], [5, 5]]),
+  scores: scoresFor([[4, 5], [5, 4], [6, 6]]),
   bankerHoles: { 0: 0, 1: 1 }, // A banks hole 0; force B as banker on hole 1 even though A won hole 0
   gameOpts: { bankerVal: 1 },
 }));
-// Hole 0 banker = A: A +2, B -1, C -1. Hole 1 banker = B(3): beats A(4) and C(5) -> B +2, A -1, C -1
+// Hole 0 banker = A: A +2, B -1, C -1. Hole 1 banker = B(4): beats A(5) and C(6) -> B +2, A -1, C -1
 assertEqual(call('calcBankerMoney'), [1, 1, -2], 'override makes B the hole-1 banker: A(+2-1)=+1, B(-1+2)=+1, C(-1-1)=-2');
 
 console.log('Banker: a tie against the banker pushes (no money moves for that pairing)');
@@ -488,27 +489,76 @@ loadState(freshStateLiteral({
 }));
 assertEqual(call('calcBankerMoney'), [8, -4, -4], 'every match doubles to $4 -> A +8, B -4, C -4');
 
-console.log('Banker press: a group press and a player press stack multiplicatively on that player');
+console.log('Banker press: a player press and the banker group press each add the original, so both on one match = 3x (not 4x)');
 loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
   gameType: 'banker',
   holeCount: 1,
-  scores: scoresFor([[4], [5], [6]]),
+  scores: scoresFor([[4], [5], [6]]), // A pars (no birdie factor); A beats B and C
   bankerHoles: { 0: 0 },
-  bankerPresses: { 0: { group: 1, units: { 1: 1 } } }, // group 2x, plus B presses again -> A-vs-B is 4x
+  bankerPresses: { 0: { group: 1, units: { 1: 1 } } }, // banker presses all + B presses -> A-vs-B factor 1+1+1=3
   gameOpts: { bankerVal: 2 },
 }));
-assertEqual(call('calcBankerMoney'), [12, -8, -4], 'A vs B is $8 (4x), A vs C is $4 (2x) -> A +12, B -8, C -4');
+assertEqual(call('calcBankerMoney'), [10, -6, -4], 'A vs B is $6 (3x: base + banker press + B press), A vs C is $4 (2x) -> A +10, B -6, C -4');
 assertEqual(call('calcBankerMoney').reduce((a, b) => a + b, 0), 0, 'presses stay zero-sum');
+
+console.log('Banker birdie/eagle: the match winner\'s gross score multiplies the bet — birdie x2, eagle x3');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  pars: [4, ...Array(17).fill(4)],
+  scores: scoresFor([[3], [5], [6]]), // banker A makes a gross birdie (3 on a par 4) and wins both matches
+  bankerHoles: { 0: 0 },
+  gameOpts: { bankerVal: 2 },
+}));
+assertEqual(call('calcBankerMoney'), [8, -4, -4], 'A birdies: each match doubles to $4 -> A +8, B -4, C -4');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  pars: [4, ...Array(17).fill(4)],
+  scores: scoresFor([[2], [5], [6]]), // banker A makes a gross eagle (2 on a par 4)
+  bankerHoles: { 0: 0 },
+  gameOpts: { bankerVal: 2 },
+}));
+assertEqual(call('calcBankerMoney'), [12, -6, -6], 'A eagles: each match triples to $6 -> A +12, B -6, C -6');
+
+console.log('Banker birdie: the multiplier follows the match WINNER, so an opponent who beats the banker with a birdie doubles their own win');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  pars: [4, ...Array(17).fill(4)],
+  scores: scoresFor([[5], [3], [6]]), // banker A(5). B(3) birdies and beats A; C(6) loses to A
+  bankerHoles: { 0: 0 },
+  gameOpts: { bankerVal: 2 },
+}));
+// A vs B: B wins with a birdie -> $4 to B; A vs C: A wins with a bogey (no factor) -> $2 to A
+assertEqual(call('calcBankerMoney'), [-2, 4, -2], 'B birdies to beat the banker for $4; A beats C for $2 -> A -2, B +4, C -2');
+
+console.log('Banker birdie x press: score factor and press factor multiply together');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  pars: [4, ...Array(17).fill(4)],
+  scores: scoresFor([[3], [5], [6]]), // banker A birdies (x2)
+  bankerHoles: { 0: 0 },
+  bankerPresses: { 0: { group: 0, units: { 1: 1 } } }, // B presses (x2 on that match)
+  gameOpts: { bankerVal: 2 },
+}));
+// A vs B: birdie(2) x press(2) = 4x -> $8; A vs C: birdie(2) x 1 = 2x -> $4
+assertEqual(call('calcBankerMoney'), [12, -8, -4], 'birdie x press multiply: A vs B is $8 (4x), A vs C is $4 (2x) -> A +12, B -8, C -4');
 
 console.log('Banker (2v2v2 teams): banker team plays best-ball vs each other team; the swing splits within each team');
 loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }, { name: 'D', hdcp: 0 }, { name: 'E', hdcp: 0 }, { name: 'F', hdcp: 0 }],
   gameType: 'banker',
   holeCount: 1,
-  // Teams: [A,B]=best 3, [C,D]=best 4, [E,F]=best 5. Banker = team 0 (chosen first).
-  // team0(3) beats team1(4) and team2(5) at $2/team; each side splits over its 2 members.
-  scores: scoresFor([[3], [5], [4], [6], [5], [5]]),
+  // Teams: [A,B]=best 4, [C,D]=best 5, [E,F]=best 6 (all par-or-worse, no score factor).
+  // team0(4) beats team1(5) and team2(6) at $2/team; each side splits over its 2 members.
+  scores: scoresFor([[4], [5], [5], [6], [6], [6]]),
   bankerHoles: { 0: 0 }, // team 0 (A&B) banks hole 0
   gameOpts: { bankerVal: 2, bankerTeams: true, bankerTeamRoster: [[0, 1], [2, 3], [4, 5]] },
 }));
@@ -521,19 +571,20 @@ loadState(freshStateLiteral({
   holeCount: 4,
   gameOpts: { bankerVal: 2 },
   scores: scoresFor([
-    [4, 5, 4, 6], // A
-    [5, 3, 4, 5], // B
-    [6, 4, 4, 3], // C
-    [5, 6, 4, 7], // D
+    [4, 5, 5, 6], // A
+    [5, 4, 5, 5], // B
+    [6, 6, 5, 7], // C
+    [5, 7, 5, 8], // D
   ]),
   bankerHoles: { 0: 0 }, // user picks A to bank the first hole
-  // Hole 0: banker A (chosen first) beats B,C,D -> A +6, others -2 each
-  // Hole 1: banker A (won hole 0). A(5) loses to B(3) & C(4), beats D(6) -> A -2, B +2, C +2, D -2
-  // Hole 2: banker B (won hole 1). Everyone shoots 4 -> all push -> no money; hole is tied
-  // Hole 3: banker carries to B (hole 2 tied). B(5) beats A(6) & D(7), loses to C(3) -> A -2, B +2, C +2, D -2
-  // Totals: A 6-2+0-2=2, B -2+2+0+2=2, C -2+2+0+2=2, D -2-2+0-2=-6
+  // Scores kept par-or-worse so no birdie/eagle factor; $2/hole per match.
+  // Hole 0: banker A (chosen) beats B,C,D -> A +6, others -2 each
+  // Hole 1: banker A (won hole 0). A(5) loses to B(4), beats C(6) & D(7) -> A +2, B +2, C -2, D -2
+  // Hole 2: banker B (won hole 1). Everyone shoots 5 -> all push; hole is tied
+  // Hole 3: banker carries to B (hole 2 tied). B(5) beats A(6), C(7) & D(8) -> A -2, B +6, C -2, D -2
+  // Totals: A 6+2+0-2=6, B -2+2+0+6=6, C -2-2+0-2=-6, D -2-2+0-2=-6
 }));
-assertEqual(call('calcBankerMoney'), [2, 2, 2, -6], 'exact settle across 4 holes with a tied hole carrying the banker forward');
+assertEqual(call('calcBankerMoney'), [6, 6, -6, -6], 'exact settle across 4 holes with a tied hole carrying the banker forward');
 assertEqual(call('calcBankerMoney').reduce((a, b) => a + b, 0), 0, 'the 4-hole banker round is zero-sum');
 
 console.log('Banker: money is driven by NET score — a handicap stroke pushes hole 0, and the banker (carried on the tie) wins hole 1 on net');
