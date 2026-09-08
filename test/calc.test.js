@@ -489,18 +489,44 @@ loadState(freshStateLiteral({
 }));
 assertEqual(call('calcBankerMoney'), [8, -4, -4], 'every match doubles to $4 -> A +8, B -4, C -4');
 
-console.log('Banker press: a player press and the banker group press each add the original, so both on one match = 3x (not 4x)');
+console.log('Banker press: presses are multiplicative — a player press and the banker group press on one match = 4x');
 loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
   gameType: 'banker',
   holeCount: 1,
   scores: scoresFor([[4], [5], [6]]), // A pars (no birdie factor); A beats B and C
   bankerHoles: { 0: 0 },
-  bankerPresses: { 0: { group: 1, units: { 1: 1 } } }, // banker presses all + B presses -> A-vs-B factor 1+1+1=3
+  bankerPresses: { 0: { group: 1, units: { 1: 1 } } }, // banker presses all (x2) + B presses (x2) -> A-vs-B is x4
   gameOpts: { bankerVal: 2 },
 }));
-assertEqual(call('calcBankerMoney'), [10, -6, -4], 'A vs B is $6 (3x: base + banker press + B press), A vs C is $4 (2x) -> A +10, B -6, C -4');
+assertEqual(call('calcBankerMoney'), [12, -8, -4], 'A vs B is $8 (4x: two presses double twice), A vs C is $4 (2x) -> A +12, B -8, C -4');
 assertEqual(call('calcBankerMoney').reduce((a, b) => a + b, 0), 0, 'presses stay zero-sum');
+
+console.log('Banker: the worked example — $5 base, player press -> $10, banker press -> $20, then a birdie -> $40 / eagle -> $60');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  pars: [4, ...Array(17).fill(4)],
+  scores: scoresFor([[5], [3]]), // banker A(5 bogey); B birdies (3) and beats the banker
+  bankerHoles: { 0: 0 },
+  bankerPresses: { 0: { group: 1, units: { 1: 1 } } }, // B pressed + banker pressed -> x4
+  gameOpts: { bankerVal: 5 },
+}));
+// $5 base x 4 (two presses) x 2 (B's birdie wins) = $40, paid by the banker to B
+assertEqual(call('calcBankerMoney'), [-40, 40], 'two presses (x4) and a birdie (x2) on a $5 base = $40 to the winner');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  pars: [4, ...Array(17).fill(4)],
+  scores: scoresFor([[5], [2]]), // same, but B makes an eagle (2)
+  bankerHoles: { 0: 0 },
+  bankerPresses: { 0: { group: 1, units: { 1: 1 } } },
+  gameOpts: { bankerVal: 5 },
+}));
+// $5 base x 4 (two presses) x 3 (eagle) = $60
+assertEqual(call('calcBankerMoney'), [-60, 60], 'two presses (x4) and an eagle (x3) on a $5 base = $60 to the winner');
 
 console.log('Banker birdie/eagle: the match winner\'s gross score multiplies the bet — birdie x2, eagle x3');
 loadState(freshStateLiteral({
