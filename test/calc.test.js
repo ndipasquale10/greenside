@@ -577,6 +577,20 @@ loadState(freshStateLiteral({
 // A vs B: birdie(2) x press(2) = 4x -> $8; A vs C: birdie(2) x 1 = 2x -> $4
 assertEqual(call('calcBankerMoney'), [12, -8, -4], 'birdie x press multiply: A vs B is $8 (4x), A vs C is $4 (2x) -> A +12, B -8, C -4');
 
+console.log("Banker birdie: the bet doubles when EITHER side makes it — even a gross birdie by the player who loses the match on net");
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 19 }],
+  gameType: 'banker',
+  holeCount: 1,
+  handicapMode: 'full', // B plays off 19 -> two strokes on the index-1 hole
+  pars: [4, ...Array(17).fill(4)],
+  scores: scoresFor([[3], [4]]), // banker A makes a gross birdie (3) but B (gross 4, net 2) wins the hole
+  bankerHoles: { 0: 0 },
+  gameOpts: { bankerVal: 2 },
+}));
+// A's gross birdie doubles the bet even though A loses the match: B wins $2 x 2 = $4
+assertEqual(call('calcBankerMoney'), [-4, 4], "the banker's gross birdie doubles the bet (x2) though B wins on net -> B +4, A -4");
+
 console.log('Banker (2v2v2 teams): banker team plays best-ball vs each other team; the swing splits within each team');
 loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }, { name: 'D', hdcp: 0 }, { name: 'E', hdcp: 0 }, { name: 'F', hdcp: 0 }],
