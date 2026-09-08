@@ -100,7 +100,7 @@ scriptBlocks.forEach((code, i) => {
   }
 });
 
-const required = ['calcVegasMoney', 'calcNassauMoney', 'calcSkins', 'calcBonusMoney', 'addBonus', 'removeBonus', 'getBonusCount', 'getPlayingHandicaps', 'readGameOpts', 'computeScoringStats', 'esc', 'safeParseJSON', 'mergeByName', 'roundNetsToCents', 'sixesSetupValid', 'vegasSetupValid', 'calcBankerMoney', 'bankerForHole', 'bankerPickMissing'];
+const required = ['calcVegasMoney', 'calcNassauMoney', 'calcSkins', 'calcBonusMoney', 'addBonus', 'removeBonus', 'getBonusCount', 'getPlayingHandicaps', 'readGameOpts', 'computeScoringStats', 'esc', 'safeParseJSON', 'mergeByName', 'roundNetsToCents', 'sixesSetupValid', 'vegasSetupValid', 'calcBankerMoney', 'bankerForHole', 'bankerPickMissing', 'bankerPressMult', 'pressBankerGroup', 'pressBankerUnit'];
 for (const fn of required) {
   if (typeof context[fn] !== 'function') {
     console.error(`FATAL: ${fn} was not found in the loaded script context. Aborting tests.`);
@@ -135,6 +135,7 @@ function freshStateLiteral(overrides) {
     bonusPoints: {},
     wolfHoles: {},
     bankerHoles: {},
+    bankerPresses: {},
     matchPresses: [],
     pairings: [],
     currentHole: 0,
@@ -462,6 +463,43 @@ loadState(freshStateLiteral({
   gameOpts: { bankerVal: 2 },
 }));
 assertEqual(call('calcBankerMoney'), [2, 0, -2], 'banker pushes the tie with B but collects $2 from C');
+
+console.log('Banker press: a single player pressing the banker doubles only that heads-up match on the hole');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  scores: scoresFor([[4], [5], [6]]), // banker A beats B and C
+  bankerHoles: { 0: 0 },
+  bankerPresses: { 0: { group: 0, units: { 1: 1 } } }, // B presses the banker (2x on A-vs-B only)
+  gameOpts: { bankerVal: 2 },
+}));
+assertEqual(call('calcBankerMoney'), [6, -4, -2], 'A vs B is $4 (pressed 2x), A vs C stays $2 -> A +6, B -4, C -2');
+
+console.log('Banker press: the banker pressing the group doubles every match on the hole');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  scores: scoresFor([[4], [5], [6]]),
+  bankerHoles: { 0: 0 },
+  bankerPresses: { 0: { group: 1, units: {} } }, // banker presses everyone
+  gameOpts: { bankerVal: 2 },
+}));
+assertEqual(call('calcBankerMoney'), [8, -4, -4], 'every match doubles to $4 -> A +8, B -4, C -4');
+
+console.log('Banker press: a group press and a player press stack multiplicatively on that player');
+loadState(freshStateLiteral({
+  players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }],
+  gameType: 'banker',
+  holeCount: 1,
+  scores: scoresFor([[4], [5], [6]]),
+  bankerHoles: { 0: 0 },
+  bankerPresses: { 0: { group: 1, units: { 1: 1 } } }, // group 2x, plus B presses again -> A-vs-B is 4x
+  gameOpts: { bankerVal: 2 },
+}));
+assertEqual(call('calcBankerMoney'), [12, -8, -4], 'A vs B is $8 (4x), A vs C is $4 (2x) -> A +12, B -8, C -4');
+assertEqual(call('calcBankerMoney').reduce((a, b) => a + b, 0), 0, 'presses stay zero-sum');
 
 console.log('Banker (2v2v2 teams): banker team plays best-ball vs each other team; the swing splits within each team');
 loadState(freshStateLiteral({
