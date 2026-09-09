@@ -721,7 +721,7 @@ section("A round with no date does not render \"Invalid Date\"");
  * deliberately discarded. The setup screen still offered the input, which meant
  * you could stake money on a segment the engine had already decided to ignore.
  */
-section("A nine-hole round offers no back-nine bet");
+section("A nine-hole round offers only the bet that settles");
 {
   const { ctx, p, errors } = await page();
   const shape = (holes) =>
@@ -742,9 +742,10 @@ section("A nine-hole round offers no back-nine bet");
     }, holes);
   const eighteen = await shape(18);
   const nine = await shape(9);
-  ok(eighteen.back, "eighteen holes still offers the back-nine bet");
+  ok(eighteen.back && eighteen.overall, "eighteen holes offers back nine and overall");
   ok(!nine.back, "nine holes does not offer a back-nine bet");
-  ok(nine.front && nine.overall, "nine holes still offers the bets that do settle");
+  ok(!nine.overall, "nine holes does not offer an overall bet either — Overall is an eighteen-hole bet");
+  ok(nine.front, "nine holes offers the one bet that settles: the match");
   ok(errors.length === 0, "nine-hole nassau: no page errors", errors[0] || "");
   await ctx.close();
 }
