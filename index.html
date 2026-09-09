@@ -45,6 +45,33 @@ h1,h2,.brand-seal span,.welcome-title,.games-title,.es-title,.hole-big{font-synt
 
 /* One card anatomy. Anything that sits directly on the page reads as the same surface; only sub-panels nested inside a card (.sb-card) differ. */
 .card,.lb-card,.stat-tile,.round-card,.money-flow-wrap,.games-summary,.resume-card-inner,.season-stats-card,header,.ribbon-strip,.season-summary{background:var(--card);border:var(--bw) solid var(--rule);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);}.season-summary{display:grid;grid-template-columns:1fr auto;align-items:center;padding:var(--sp-7) var(--sp-8);cursor:pointer;transition:transform var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease);}.season-summary:active{transform:scale(0.99);}.season-summary .ss-k{font-size:var(--fs-3xs);letter-spacing:var(--ls-wide);text-transform:uppercase;color:var(--muted);font-weight:700;}.season-summary .ss-v{font-size:var(--fs-3xl);font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:700;line-height:var(--lh-tight);margin-top:var(--sp-1);}.season-summary .ss-go{color:var(--accent);font-weight:700;font-size:var(--fs-xl);padding-left:var(--sp-5);}.season-summary .ss-meta{grid-column:1 / -1;margin-top:var(--sp-5);font-size:var(--fs-xs);color:var(--muted);font-weight:600;}
+/* Home: the season total gains a trajectory, and the screen gains a memory. */
+.ss-spark{grid-column:1 / -1;margin-top:var(--sp-5);height:40px;}
+.ss-spark canvas{width:100%;height:40px;display:block;}
+.ss-meta b{font-weight:800;}
+.streak-chip{display:inline-flex;align-items:center;gap:var(--sp-2);padding:var(--sp-1) var(--sp-5);border-radius:var(--radius-pill);background:var(--press-surface);color:var(--gold-t);font-weight:800;}
+.lr-card{display:block;width:100%;text-align:left;font-family:inherit;color:inherit;cursor:pointer;background:var(--card);border:var(--bw) solid var(--rule);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:var(--sp-7) var(--sp-8);}
+.lr-card:active{transform:scale(0.99);}
+.lr-top{display:flex;align-items:baseline;justify-content:space-between;gap:var(--sp-5);}
+.lr-course{font-weight:700;font-size:var(--fs-md);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lr-when{font-size:var(--fs-2xs);color:var(--muted);font-weight:600;white-space:nowrap;}
+.lr-game{font-size:var(--fs-2xs);color:var(--muted);margin-top:var(--sp-1);}
+.lr-row{display:flex;align-items:center;gap:var(--sp-4);margin-top:var(--sp-6);}
+.lr-name{font-weight:700;font-size:var(--fs-sm);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lr-amt{margin-left:auto;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:700;font-size:var(--fs-sm);}
+.lr-you{display:flex;align-items:center;margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:var(--bw) solid var(--rule);font-size:var(--fs-2xs);color:var(--muted);font-weight:600;}
+.lr-you b{margin-left:auto;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:var(--fs-sm);}
+.lb-move{width:24px;text-align:center;font-size:var(--fs-3xs);font-weight:800;flex-shrink:0;}
+.lb-move.up{color:var(--green-t);}
+.lb-move.dn{color:var(--red-t);}
+.lb-move.flat{color:var(--muted-c);}
+.rv-card{display:flex;align-items:center;gap:var(--sp-5);background:var(--card);border:var(--bw) solid var(--rule);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:var(--sp-7) var(--sp-8);}
+.rv-txt{min-width:0;}
+.rv-who{font-weight:700;font-size:var(--fs-sm);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rv-sub{font-size:var(--fs-2xs);color:var(--muted);margin-top:var(--sp-1);}
+.rv-rec{margin-left:auto;text-align:right;flex-shrink:0;}
+.rv-num{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:700;font-size:var(--fs-lg);color:var(--ink);}
+.rv-amt{font-size:var(--fs-2xs);font-weight:700;margin-top:var(--sp-1);}
 /* Two heading levels, and only two. A section heading introduces a group of content; a panel label names content inside one card. */
 #game-desc:empty{display:none;}
 /* The options block docks under the selected game card, which sits inside a .form-group -- whose label rule uppercases everything. Option labels are sentences ("Blind Lone Wolf (before tee shots)"), not labels, so pin them above that rule rather than let ancestry decide. */
@@ -1094,22 +1121,64 @@ let _groupEditMode=!1;
 // digit past that. Shared so every leaderboard -- home, live watch, settle --
 // crowns the leader the same way instead of each screen inventing its own.
 function rankChip(n){return '<span class="rank-medal'+(n<=3?" r"+n:" rank-plain")+'">'+n+"</span>"}
+// Chronology for the season story. A round from a partial sync can carry an
+// unusable date; sort it to the start rather than letting NaN scramble the order.
+function _rTime(r){const t=new Date(r.finishedDate||r.date).getTime();return isNaN(t)?0:t}
+function _myNet(r,name){const i=(r.players||[]).findIndex(p=>p.name===name);return i<0?null:(r.money[i]||0)}
+// Standing order over an arbitrary slice of rounds, so "where did I move to"
+// can be answered by ranking the season twice -- with and without the last round.
+function _orderOf(rounds){const a={};rounds.forEach(r=>(r.players||[]).forEach((p,i)=>{a[p.name]=(a[p.name]||0)+(r.money[i]||0)}));
+  return Object.keys(a).sort((x,y)=>a[y]-a[x])}
+// The opponent worth naming: whoever is up on you, else whoever you are up on
+// the most. Ties broken by rounds shared, so it is someone you actually play.
+function _rivalOf(rounds,me){const s={};
+  rounds.forEach(r=>{const my=_myNet(r,me);if(null==my)return;
+    (r.players||[]).forEach((p,i)=>{if(p.name===me)return;
+      const v=s[p.name]||(s[p.name]={name:p.name,color:p.color,n:0,w:0,l:0,diff:0}),o=r.money[i]||0;
+      v.n++,v.diff+=my-o,my>o?v.w++:my<o&&v.l++})});
+  const l=Object.values(s);if(!l.length)return null;
+  const behind=l.filter(v=>v.diff<-.005);
+  if(behind.length)return Object.assign(behind.sort((a,b)=>a.diff-b.diff||b.n-a.n)[0],{ahead:!0});
+  return Object.assign(l.sort((a,b)=>b.diff-a.diff||b.n-a.n)[0],{ahead:!1})}
 function renderHome(){
   const el=document.getElementById("home-content");if(!el)return;
   const{rounds,list,hiddenCount}=seasonAgg(),me=getPrimaryPlayerName(),mine=list.find(p=>p.name===me);
-  if(!rounds.length)return void(el.innerHTML=emptyStateHTML("\u{1F3CC}","No season yet","Finish and settle a round and your season table starts building here.",["Start a round","showScreen(\'games\')"]));
-  let h="";
+  if(!rounds.length)return void(el.innerHTML=emptyStateHTML("\u{1F3CC}","No season yet","Finish and settle a round and your season table starts building here.",["Start a round","showScreen('games')"]));
+  const chrono=rounds.slice().sort((a,b)=>_rTime(a)-_rTime(b)),lastR=chrono[chrono.length-1];
+  let h="",series=null;
   if(mine){
     const winPct=mine.rounds?Math.round(100*mine.wins/mine.rounds):0;
-    const best=Math.max(0,...rounds.map(r=>{const i=(r.players||[]).findIndex(p=>p.name===me);return i<0?0:(r.money[i]||0)}));
+    let run=0;series=chrono.map(r=>{const v=_myNet(r,me);return run+=(null==v?0:v)});
+    const lastNet=_myNet(lastR,me);
+    let streak=0;for(let i=chrono.length-1;i>=0;i--){const v=_myNet(chrono[i],me);if(null!=v&&v>.005)streak++;else break}
     h+='<div class="season-summary" onclick="showScreen(\'season\')" role="button" tabindex="0" aria-label="Your season details">'
       +'<div><div class="ss-k">Your season</div>'
       +'<div class="ss-v '+(mine.money>.005?"match-up":mine.money<-.005?"match-dn":"")+'">'+fmtMoney(mine.money)+'</div></div>'
       +'<span class="ss-go" aria-hidden="true">→</span>'
-      +'<div class="ss-meta">'+mine.rounds+' rounds · '+winPct+'% won · best '+fmtMoney(best)+'</div>'
-      +'</div>'
+      +(series.length>1?'<div class="ss-spark"><canvas id="ss-spark" height="40" aria-label="Season money by round"></canvas></div>':"")
+      +'<div class="ss-meta">'
+      +(null!=lastNet?'<b class="'+(lastNet>.005?"match-up":lastNet<-.005?"match-dn":"")+'">'+(lastNet>.005?"▲":lastNet<-.005?"▼":"–")+' '+fmtMoney(lastNet)+' last round</b> · ':"")
+      +mine.rounds+' rounds · '+winPct+'% won'
+      +(streak>=2?' <span class="streak-chip">🔥 '+streak+'-round heater</span>':"")
+      +'</div></div>'
   }
-  const collapsed=groupTableCollapsed();
+  if(lastR){
+    let bi=0;(lastR.players||[]).forEach((p,i)=>{if((lastR.money[i]||0)>(lastR.money[bi]||0))bi=i});
+    const champ=(lastR.players||[])[bi],cv=lastR.money[bi]||0,my=_myNet(lastR,me);
+    if(champ){
+      h+='<div class="section-head"><h2>Last time out</h2></div>'
+        +'<button class="lr-card" onclick="viewFinishedRound(\''+esc(lastR.id)+'\')">'
+        +'<div class="lr-top"><span class="lr-course">'+esc(lastR.course||"Round")+'</span>'
+        +'<span class="lr-when">'+dLbl(lastR.finishedDate||lastR.date,{weekday:"short",month:"short",day:"numeric"})+'</span></div>'
+        +'<div class="lr-game">'+esc(GAME_NAMES[lastR.gameType]||lastR.gameType||"")+'</div>'
+        +'<div class="lr-row">'+rankChip(1)+avatarHTML(champ,20)
+        +'<span class="lr-name">'+esc(champ.name)+(champ.name===me?" took it":" took it")+'</span>'
+        +'<span class="lr-amt '+(cv>.005?"match-up":cv<-.005?"match-dn":"")+'">'+fmtMoney(cv)+'</span></div>'
+        +(null!=my&&champ.name!==me?'<div class="lr-you">You<b class="'+(my>.005?"match-up":my<-.005?"match-dn":"")+'">'+fmtMoney(my)+'</b></div>':"")
+        +'</button>'
+    }
+  }
+  const collapsed=groupTableCollapsed(),now=_orderOf(chrono),prev=_orderOf(chrono.slice(0,-1));
   h+='<div class="section-head lb-head">'
     +'<h2 class="lb-toggle" onclick="toggleGroupTable()" role="button" tabindex="0" aria-expanded="'+(!collapsed)+'" aria-controls="lb-body">'
       +'<span class="lb-chevron'+(collapsed?" is-collapsed":"")+'" aria-hidden="true">▾</span>The Group · money table</h2>'
@@ -1118,9 +1187,13 @@ function renderHome(){
   if(!collapsed){
     h+='<div id="lb-body" class="lb-card'+(_groupEditMode?" is-editing":"")+'">';
     list.forEach((p,i)=>{
-      const canRemove=_groupEditMode&&p.name!==me;
+      const canRemove=_groupEditMode&&p.name!==me,pi=prev.indexOf(p.name),ni=now.indexOf(p.name);
+      const moved=pi>=0&&ni>=0&&pi!==ni;
+      const mv=_groupEditMode?"":'<span class="lb-move '+(moved?(ni<pi?"up":"dn"):"flat")+'"'
+        +(moved?' aria-label="'+(ni<pi?"up ":"down ")+Math.abs(pi-ni)+' since last round"':' aria-hidden="true"')+'>'
+        +(moved?(ni<pi?"▲":"▼")+Math.abs(pi-ni):"–")+'</span>';
       h+='<div class="lb-row'+(p.name===me?" lb-me":"")+'">'+rankChip(i+1)+avatarHTML(p,22)
-        +'<span class="lb-name">'+esc(p.name)+'<small>'+p.rounds+' rounds</small></span>'
+        +'<span class="lb-name">'+esc(p.name)+'<small>'+p.rounds+' rounds</small></span>'+mv
         +'<span class="lb-amt '+(p.money>.005?"match-up":p.money<-.005?"match-dn":"")+'">'+fmtMoney(p.money)+'</span>'
         +(canRemove?'<button class="lb-del" data-name="'+esc(p.name)+'" onclick="removeSeasonPlayer(this.dataset.name)" aria-label="Remove '+esc(p.name)+' from season">✕</button>':(_groupEditMode?'<span class="lb-del lb-del-lock" aria-hidden="true"></span>':''))
         +'</div>'
@@ -1128,7 +1201,19 @@ function renderHome(){
     h+="</div>";
     if(hiddenCount>0)h+='<div class="lb-hidden-note"><span>'+hiddenCount+' hidden</span><a class="link-btn" onclick="showAllSeasonPlayers()" role="button" tabindex="0">Show all</a></div>';
   }
-  el.innerHTML=h
+  const rv=_rivalOf(chrono,me);
+  if(rv&&rv.n>=2){
+    const amt=fmtMoney(Math.abs(rv.diff)).replace("+","");
+    h+='<div class="section-head"><h2>'+(rv.ahead?"Your nemesis":"You own")+'</h2></div>'
+      +'<div class="rv-card">'+avatarHTML(rv,34)
+      +'<div class="rv-txt"><div class="rv-who">'+esc(rv.name)+'</div>'
+      +'<div class="rv-sub">'+rv.n+' round'+(1===rv.n?"":"s")+' together</div></div>'
+      +'<div class="rv-rec"><div class="rv-num">'+rv.w+'–'+rv.l+'</div>'
+      +'<div class="rv-amt '+(rv.ahead?"match-dn":"match-up")+'">'+amt+(rv.ahead?" up on you":" up on them")+'</div></div></div>'
+  }
+  el.innerHTML=h;
+  if(series&&series.length>1){const cv=document.getElementById("ss-spark");
+    cv&&requestAnimationFrame(()=>drawSparkline(cv,series))}
 }
 function watchLinkURL(){const c=state.liveCode||"";return c?location.origin+location.pathname+"?watch="+encodeURIComponent(c):null}
 function emptyStateHTML(icon,title,body,cta){return '<div class="empty-state"><div class="es-icon" aria-hidden="true">'+icon+'</div>'+'<div class="es-title">'+esc(title)+'</div>'+'<div class="es-body">'+esc(body)+'</div>'+(cta?'<button class="btn primary" onclick="'+cta[1]+'">'+esc(cta[0])+'</button>':"")+"</div>"}

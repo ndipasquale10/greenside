@@ -749,6 +749,71 @@ section("A nine-hole round offers no back-nine bet");
   await ctx.close();
 }
 
+/**
+ * The home screen used to be an index: a season total, a static ranking, two
+ * buttons. It reported state and told no story -- the number had no trajectory,
+ * the round you played on Saturday was invisible, and the rivalries and streaks
+ * the app already computes lived on other tabs. These assertions cover the
+ * story it tells now, and -- just as important -- that rebuilding it kept the
+ * group table's collapse, edit mode and remove buttons working.
+ */
+section("The home screen tells the season's story");
+{
+  const { ctx, p, errors } = await page();
+  // A season where the rival leads early, then you win the last three and pass them.
+  const built = await p.evaluate(async () => {
+    const me = getPrimaryPlayerName();
+    const names = [me, "Rival R"];
+    const rounds = {};
+    [[-30, 30], [-30, 30], [-10, 10], [25, -25], [30, -30], [40, -40]].forEach((money, i) => {
+      const iso = new Date(2026, 0, i + 1).toISOString();
+      rounds["s" + i] = { id: "s" + i, finished: true, course: "Test GC", gameType: "skins",
+        date: iso, finishedDate: iso, scores: {},
+        players: names.map((n, k) => ({ name: n, color: k })), money };
+    });
+    localStorage.setItem("golfRounds", JSON.stringify(rounds));
+    showScreen("home");
+    await new Promise((r) => setTimeout(r, 700));
+    const t = document.querySelector("#home-content").innerText;
+    return {
+      spark: !!document.getElementById("ss-spark"),
+      delta: /\+\$40 last round/.test(t),
+      heater: /3-round heater/.test(t),
+      lastOut: document.querySelector(".lr-name")?.textContent || "",
+      lastOutOpens: (document.querySelector(".lr-card")?.getAttribute("onclick") || "").includes("viewFinishedRound"),
+      moves: [...document.querySelectorAll(".lb-move")].map((e) => e.textContent),
+      rivalAmt: document.querySelector(".rv-amt")?.textContent || "",
+    };
+  });
+  ok(built.spark, "the season total carries a sparkline of the money by round");
+  ok(built.delta, "the hero names what the last round did to you");
+  ok(built.heater, "a winning streak surfaces as a heater chip");
+  ok(built.lastOut.includes("took it"), "the last round played is on the home screen", built.lastOut);
+  ok(built.lastOutOpens, "tapping it opens that round's results");
+  ok(built.moves.join(",") === "▲1,▼1", "the table shows rank movement since the last round", built.moves.join(","));
+  ok(/up on them/.test(built.rivalAmt), "a rival line names where you stand head to head", built.rivalAmt);
+
+  // Rebuilding renderHome must not have cost the group table its controls.
+  const kept = await p.evaluate(async () => {
+    toggleGroupTable(); await new Promise((r) => setTimeout(r, 200));
+    const collapsed = !document.getElementById("lb-body");
+    toggleGroupTable(); await new Promise((r) => setTimeout(r, 200));
+    const reopened = !!document.getElementById("lb-body");
+    toggleGroupEdit(); await new Promise((r) => setTimeout(r, 200));
+    const editing = !!document.querySelector(".lb-card.is-editing");
+    const removable = !!document.querySelector(".lb-del[data-name]");
+    const movesHidden = !document.querySelector(".lb-move");
+    toggleGroupEdit(); await new Promise((r) => setTimeout(r, 200));
+    return { collapsed, reopened, editing, removable, movesHidden };
+  });
+  ok(kept.collapsed, "the group table still collapses");
+  ok(kept.reopened, "and reopens");
+  ok(kept.editing && kept.removable, "edit mode still offers a remove button");
+  ok(kept.movesHidden, "rank movement steps aside for the remove buttons in edit mode");
+  ok(errors.length === 0, "home screen: no page errors", errors[0] || "");
+  await ctx.close();
+}
+
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);
