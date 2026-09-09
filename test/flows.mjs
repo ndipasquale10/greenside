@@ -645,6 +645,110 @@ section("A hostile course name renders as text, not markup");
   await ctx.close();
 }
 
+/**
+ * Three ways a round can arrive malformed and be rendered anyway. The importer
+ * accepts any JSON with a `rounds` object, and Firebase sync and the live share
+ * code deliver rounds nobody on this device typed, so "the app wrote it" is not
+ * a shape guarantee. A finished round whose money is not one finite number per
+ * player still reaches seasonAgg and lands in the season table as -$NaN; a
+ * round with no date renders the literal string "Invalid Date".
+ */
+section("Malformed rounds are refused rather than rendered");
+{
+  const { ctx, p, errors } = await page();
+  const res = await p.evaluate(async () => {
+    const shapes = {
+      noPlayers:   { id: "m1", finished: true },
+      nullPlayers: { id: "m2", finished: true, players: null, money: null },
+      lenMismatch: { id: "m3", finished: true, players: [{ name: "X" }], money: [1, 2, 3] },
+      nonNumeric:  { id: "m4", finished: true, players: [{ name: "Y" }], money: ["a"] },
+      nanMoney:    { id: "m5", finished: true, players: [{ name: "Z" }], money: [NaN] },
+    };
+    const legit = {
+      finishedRound: { id: "g", finished: true, players: [{ name: "A" }, { name: "B" }], money: [5, -5] },
+      liveRound:     { id: "l", started: true, players: [{ name: "A" }] },
+    };
+    const verdicts = {};
+    for (const [k, v] of Object.entries({ ...shapes, ...legit })) verdicts[k] = importableRound(v);
+
+    // Only the survivors reach storage, exactly as the importer now does it.
+    const all = JSON.parse(localStorage.getItem("golfRounds"));
+    const clean = {};
+    for (const [k, v] of Object.entries(shapes)) if (importableRound(v)) clean[k] = v;
+    localStorage.setItem("golfRounds", JSON.stringify({ ...all, ...clean }));
+    showScreen("home");
+    await new Promise((r) => setTimeout(r, 600));
+    const shown = document.querySelector("#home-content")?.innerText || "";
+    return { verdicts, admitted: Object.keys(clean).length, nan: /NaN/.test(shown) };
+  });
+  for (const bad of ["noPlayers", "nullPlayers", "lenMismatch", "nonNumeric", "nanMoney"]) {
+    ok(res.verdicts[bad] === false, `import refuses a round with ${bad}`);
+  }
+  ok(res.verdicts.finishedRound === true, "import keeps a well-formed finished round");
+  ok(res.verdicts.liveRound === true, "import keeps a live round that has no money yet");
+  ok(res.admitted === 0, "none of the malformed rounds reach storage", `${res.admitted} got in`);
+  ok(!res.nan, "the season table renders no NaN");
+  ok(errors.length === 0, "malformed rounds: no page errors", errors[0] || "");
+  await ctx.close();
+}
+
+section("A round with no date does not render \"Invalid Date\"");
+{
+  const { ctx, p, errors } = await page();
+  const res = await p.evaluate(async () => {
+    const all = JSON.parse(localStorage.getItem("golfRounds"));
+    const src = Object.values(all).find((r) => r.finished);
+    const clone = JSON.parse(JSON.stringify(src));
+    clone.id = "nodate";
+    delete clone.date;
+    delete clone.finishedDate;
+    all.nodate = clone;
+    localStorage.setItem("golfRounds", JSON.stringify(all));
+    showScreen("season");
+    await new Promise((r) => setTimeout(r, 700));
+    const t = document.getElementById("history-list")?.innerText || "";
+    return { invalid: /Invalid Date/.test(t), dash: t.includes("\u2014") };
+  });
+  ok(!res.invalid, 'no row shows the literal "Invalid Date"');
+  ok(res.dash, "a dateless round falls back to an em dash");
+  ok(errors.length === 0, "dateless round: no page errors", errors[0] || "");
+  await ctx.close();
+}
+
+/**
+ * calcNassauMoney only creates the Back 9 segment when maxHole() > 9, and
+ * showHoleResult guards the same way -- so on a nine-hole round that bet is
+ * deliberately discarded. The setup screen still offered the input, which meant
+ * you could stake money on a segment the engine had already decided to ignore.
+ */
+section("A nine-hole round offers no back-nine bet");
+{
+  const { ctx, p, errors } = await page();
+  const shape = (holes) =>
+    p.evaluate(async (h) => {
+      showScreen("setup");
+      await new Promise((r) => setTimeout(r, 200));
+      setHoleCount(h);
+      setNine(0);
+      showScreen("games");
+      await new Promise((r) => setTimeout(r, 200));
+      selectGameType("nassau");
+      await new Promise((r) => setTimeout(r, 350));
+      return {
+        back: !!document.getElementById("opt-back"),
+        front: !!document.getElementById("opt-front"),
+        overall: !!document.getElementById("opt-overall"),
+      };
+    }, holes);
+  const eighteen = await shape(18);
+  const nine = await shape(9);
+  ok(eighteen.back, "eighteen holes still offers the back-nine bet");
+  ok(!nine.back, "nine holes does not offer a back-nine bet");
+  ok(nine.front && nine.overall, "nine holes still offers the bets that do settle");
+  ok(errors.length === 0, "nine-hole nassau: no page errors", errors[0] || "");
+  await ctx.close();
+}
+
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);
