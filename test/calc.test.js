@@ -705,10 +705,43 @@ loadState(freshStateLiteral({
 }));
 assertEqual(call('calcSnakeMoney'), [0, 0], 'a snake-less round settles at zero for everyone');
 
+// --- Overall is an eighteen-hole bet. On nine holes the front segment IS the
+// whole round, so Front and Overall used to cover identical holes and a player
+// who set three $5 bets had $10 change hands on one result, with the Back 9
+// stake silently dropped. A $5 nine-hole match now pays $5. ---
+console.log('Nassau: on nine holes only the match settles; Overall is eighteen-hole only');
+(() => {
+  const two = [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }];
+  const money = (H, opts) => {
+    const scores = {};
+    for (let p = 0; p < 2; p++) { scores[p] = {}; for (let h = 0; h < H; h++) scores[p][h] = p === 0 ? 4 : 5; }
+    loadState(freshStateLiteral({ players: two, scores, pars: Array(H).fill(4),
+      hdcps: Array.from({ length: H }, (_, i) => i + 1), gameType: 'nassau', holeCount: H, holeStart: 0,
+      handicapMode: 'none', gameOpts: Object.assign({ press: false, pressVal: 5, nassauTeams: false }, opts) }));
+    return call('calcNassauMoney');
+  };
+  // A wins every hole, so each live segment pays its full stake.
+  assertEqual(money(9, { front: 5, back: 5, overall: 5 }), [5, -5],
+    'nine holes: a $5 match pays $5, not $10 — back and overall are eighteen-hole bets');
+  assertEqual(money(9, { front: 5, back: 0, overall: 0 }), [5, -5],
+    'nine holes: the match alone pays the same, so the other two stakes were dead weight');
+  assertEqual(money(18, { front: 5, back: 5, overall: 5 }), [15, -15],
+    'eighteen holes is unchanged: front, back and overall each settle');
+  assertEqual(money(18, { front: 0, back: 0, overall: 5 }), [5, -5],
+    'eighteen holes: overall still settles on its own');
+  const labels = (H) => { money(H, { front: 5, back: 5, overall: 5 });
+    return JSON.parse(vm.runInContext('JSON.stringify(state._nassauBets)', context)).map((b) => b.label); };
+  assertEqual(labels(9), ['Match'], 'nine holes builds one segment, named Match rather than Front 9');
+  assertEqual(labels(18), ['Front 9', 'Back 9', 'Overall'], 'eighteen holes still builds all three');
+})();
+
 console.log('Nassau: 2v2 team best-ball mode still settles correctly after extracting settleTeamSegment (regression)');
+// Eighteen holes with only three scored: the point is that BOTH the front and
+// the overall bet pay a winning team, and Overall is an eighteen-hole bet, so a
+// short fixture would now exercise one segment instead of two.
 loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }, { name: 'C', hdcp: 0 }, { name: 'D', hdcp: 0 }],
-  holeCount: 3,
+  holeCount: 18,
   scores: scoresFor([
     [4, 5, 4], // team0 (A,B) best-ball per hole: 4, 5, 4
     [5, 5, 4],
@@ -913,12 +946,23 @@ console.log('Nassau: an automatic press fires once per 2-down event (calcNassauM
   };
   const off = run(false), on = run(true);
   const sum = on.reduce((a, b) => a + b, 0);
-  // Base is $30 to A. Presses add a bounded amount, not a per-hole avalanche.
   const added = on[0] - off[0];
+  // Count the press bets rather than compare dollars. The bug this guards is
+  // "a press re-fires every hole you stay 2 down", which is a statement about
+  // how many bets exist, so assert that directly. The old bound compared the
+  // press total against the base, which quietly depended on a nine-hole round
+  // charging both Front and Overall for the same nine holes -- once Overall
+  // became eighteen-hole-only the base halved and the bound broke, though the
+  // presses themselves never changed.
+  const presses = JSON.parse(vm.runInContext('JSON.stringify(state._nassauBets)', context)).filter((b) => b.isPress);
   if (Math.abs(sum) < 1e-9) { pass++; console.log(`  ok - pressed Nassau still nets to zero  [${on.join(', ')}]`); }
   else { fail++; console.log(`  FAIL - pressed Nassau sum=${sum}  [${on.join(', ')}]`); }
-  if (added <= off[0]) { pass++; console.log(`  ok - presses add $${added} on top of the $${off[0]} base (was $345)`); }
-  else { fail++; console.log(`  FAIL - presses added $${added}, more than the $${off[0]} base - per-hole re-trigger is back`); }
+  // Three players trail A, so at most three presses can ever open. The
+  // avalanche opened one per player per remaining hole (~$345 of action).
+  if (presses.length <= _P4.length - 1) { pass++; console.log(`  ok - ${presses.length} presses opened on a 9-hole front, one per 2-down event (was one per hole)`); }
+  else { fail++; console.log(`  FAIL - ${presses.length} press bets opened, more than one per player - per-hole re-trigger is back`); }
+  if (added === presses.length * off[0]) { pass++; console.log(`  ok - presses add $${added}: ${presses.length} x the $${off[0]} base match`); }
+  else { fail++; console.log(`  FAIL - presses added $${added}, not ${presses.length} x the $${off[0]} base`); }
 })();
 
 // --- Fractional stakes must not invent money. The uneven split pays in whole
