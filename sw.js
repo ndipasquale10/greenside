@@ -1,4 +1,14 @@
 const CACHE_NAME = "thepress-shell-v9";
+
+// The directory this worker was served from: "/" at a domain root, "/thepress/"
+// on a GitHub Pages project site. Everything else here is already relative --
+// "./sw.js" in the page, "." as the manifest start_url, "./logo.png" below --
+// so the shell test has to be too. Hardcoding "/" meant that on any subpath
+// deploy the launch URL ("/thepress/") matched neither "/" nor "*/index.html",
+// the shell was never cached or served from cache, and the app quietly lost
+// the offline support this worker exists to provide -- on a course with no
+// signal, the one place it matters.
+const SHELL_BASE = self.location.pathname.replace(/[^/]*$/, "");
 const STATIC_ASSETS = [
   "./manifest.json",
   "./logo.png",
@@ -62,7 +72,7 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
-  const isAppShell = url.origin === self.location.origin && (url.pathname === "/" || url.pathname.endsWith("/index.html"));
+  const isAppShell = url.origin === self.location.origin && (url.pathname === SHELL_BASE || url.pathname === SHELL_BASE + "index.html");
 
   if (isAppShell) {
     // Stale-while-revalidate. This app gets used on golf courses, where the
