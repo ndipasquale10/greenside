@@ -49,8 +49,8 @@ const section = (s) => console.log(`\n${s}`);
 const browser = await chromium.launch();
 
 /** A fresh page with a clean profile; page errors are fatal. */
-async function page() {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+async function page(opts = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, ...opts });
   // Offline: the Firebase tags are stripped, but block anything else that tries.
   await ctx.route("**://**", (r) =>
     new URL(r.request().url()).protocol === "file:" ? r.continue() : r.abort()
@@ -567,6 +567,81 @@ section("The Wolf pick checkmark is a badge, not a blob");
     );
   }
   ok(errors.length === 0, "wolf pick badge: no page errors", errors[0] || "");
+  await ctx.close();
+}
+
+/**
+ * A sparkline's canvas backing store has to match its CSS box times the device
+ * pixel ratio in BOTH axes. drawSparkline used to scale width by dpr and leave
+ * height alone, while scaling the drawing context by dpr in both -- so half the
+ * curve was drawn past the bottom of the buffer, clipped away, and CSS stretched
+ * the surviving top half to fill the box. It rendered correctly at dpr 1, which
+ * is a desktop browser, and wrong at 2x and 3x, which is every phone this app is
+ * actually used on. That asymmetry is why it survived: it is invisible in the
+ * one place it gets looked at. Assert the invariant at the ratios real devices
+ * report, not at the one the developer's monitor does.
+ */
+section("Sparklines fill their canvas at every device pixel ratio");
+for (const dpr of [2, 3]) {
+  const { ctx, p, errors } = await page({ deviceScaleFactor: dpr });
+  await p.evaluate(() => showScreen("you"));
+  await p.waitForTimeout(600);
+  const cv = await p.evaluate(() => {
+    const c = document.getElementById("hcp-spark");
+    if (!c) return null;
+    const r = c.getBoundingClientRect();
+    return { w: c.width, h: c.height, cssW: r.width, cssH: r.height };
+  });
+  ok(cv !== null, `${dpr}x: the handicap sparkline renders on the You screen`);
+  if (cv) {
+    ok(
+      cv.h === Math.round(cv.cssH * dpr),
+      `${dpr}x: sparkline backing height covers the whole CSS box`,
+      `backing ${cv.h}px for a ${cv.cssH}px box at ${dpr}x -- expected ${Math.round(cv.cssH * dpr)}, so the curve is clipped`
+    );
+    ok(
+      cv.w === Math.round(cv.cssW * dpr),
+      `${dpr}x: sparkline backing width covers the whole CSS box`,
+      `backing ${cv.w}px for a ${cv.cssW}px box at ${dpr}x`
+    );
+  }
+  ok(errors.length === 0, `${dpr}x: no page errors`, errors[0] || "");
+  await ctx.close();
+}
+
+/**
+ * Course names are free text, and they do not only come from the person
+ * looking at the screen -- a round arrives from sync or a shared live round
+ * carrying whatever course name its author typed. Two of the six places that
+ * render state.course interpolated it straight into HTML while the other four
+ * escaped it, so a name like `<img src=x onerror=...>` built a real element
+ * and ran its handler in the viewer's page. Player names in the very same
+ * results template were already escaped, which is what made it look deliberate
+ * and survive.
+ */
+section("A hostile course name renders as text, not markup");
+{
+  const { ctx, p, errors } = await page();
+  const res = await p.evaluate(async () => {
+    const all = JSON.parse(localStorage.getItem("golfRounds"));
+    const fid = Object.keys(all).find((k) => all[k].finished);
+    all[fid].course = '<img src=x onerror="window.__XSS=1">Pebble';
+    localStorage.setItem("golfRounds", JSON.stringify(all));
+    await viewFinishedRound(fid);
+    await new Promise((r) => setTimeout(r, 700));
+    const el = document.querySelector(".results-course");
+    return {
+      rendered: !!el,
+      elements: el ? el.querySelectorAll("*").length : -1,
+      executed: !!window.__XSS,
+      text: el ? el.textContent : "",
+    };
+  });
+  ok(res.rendered, "the results header renders a course name");
+  ok(res.elements === 0, "the course name creates no child elements", `built ${res.elements}`);
+  ok(!res.executed, "no injected handler runs");
+  ok(res.text.includes("<img"), "the raw name is shown literally as text", res.text);
+  ok(errors.length === 0, "hostile course name: no page errors", errors[0] || "");
   await ctx.close();
 }
 
