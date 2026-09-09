@@ -609,6 +609,42 @@ for (const dpr of [2, 3]) {
   await ctx.close();
 }
 
+/**
+ * Course names are free text, and they do not only come from the person
+ * looking at the screen -- a round arrives from sync or a shared live round
+ * carrying whatever course name its author typed. Two of the six places that
+ * render state.course interpolated it straight into HTML while the other four
+ * escaped it, so a name like `<img src=x onerror=...>` built a real element
+ * and ran its handler in the viewer's page. Player names in the very same
+ * results template were already escaped, which is what made it look deliberate
+ * and survive.
+ */
+section("A hostile course name renders as text, not markup");
+{
+  const { ctx, p, errors } = await page();
+  const res = await p.evaluate(async () => {
+    const all = JSON.parse(localStorage.getItem("golfRounds"));
+    const fid = Object.keys(all).find((k) => all[k].finished);
+    all[fid].course = '<img src=x onerror="window.__XSS=1">Pebble';
+    localStorage.setItem("golfRounds", JSON.stringify(all));
+    await viewFinishedRound(fid);
+    await new Promise((r) => setTimeout(r, 700));
+    const el = document.querySelector(".results-course");
+    return {
+      rendered: !!el,
+      elements: el ? el.querySelectorAll("*").length : -1,
+      executed: !!window.__XSS,
+      text: el ? el.textContent : "",
+    };
+  });
+  ok(res.rendered, "the results header renders a course name");
+  ok(res.elements === 0, "the course name creates no child elements", `built ${res.elements}`);
+  ok(!res.executed, "no injected handler runs");
+  ok(res.text.includes("<img"), "the raw name is shown literally as text", res.text);
+  ok(errors.length === 0, "hostile course name: no page errors", errors[0] || "");
+  await ctx.close();
+}
+
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);
