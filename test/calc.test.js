@@ -384,14 +384,43 @@ loadState(freshStateLiteral({
 assertEqual(call('calcMatchMoney'), [0, 0], 'A wins one hole and B wins one hole at $2 each, netting to zero; tied hole pushes');
 
 console.log('Match Play: "nassau" format pays the front/back/overall segment winner once, not per-hole');
+// Eighteen holes with three scored. This used to be a three-hole round, which
+// worked only because front and overall then covered the same holes -- the very
+// double-charge that Overall being an eighteen-hole bet removes. The point here
+// is segment-once versus per-hole, so it needs a round where both segments
+// genuinely exist.
 loadState(freshStateLiteral({
   players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }],
   gameType: 'match',
-  holeCount: 3,
-  scores: scoresFor([[4, 4, 4], [5, 5, 4]]), // A wins holes 0-1, hole2 ties -> A wins the only segment (front==overall on a 3-hole round)
+  holeCount: 18,
+  scores: scoresFor([[4, 4, 4], [5, 5, 4]]), // A wins holes 0-1, hole 2 ties -> A takes front and overall
   gameOpts: { matchFormat: 'nassau', matchFront: 1, matchBack: 1, matchOverall: 2 },
 }));
 assertEqual(call('calcMatchMoney'), [3, -3], 'A wins both the front-9 bet ($1) and overall bet ($2) as the unique segment winner, not per-hole');
+
+// --- Match Play's nassau format is the same three-segment shape as Nassau, and
+// had the same defect: Back 9 was gated on maxHole() > 9 but Overall was not, so
+// a nine-hole round charged Front and Overall for the identical nine holes. It
+// stayed exactly zero-sum while doing it, which is why a zero-sum sweep cannot
+// find this class -- the money is not invented, it is just the wrong amount. ---
+console.log('Match Play (nassau format): on nine holes only the match settles');
+(() => {
+  const money = (H, o) => {
+    const scores = { 0: {}, 1: {} };
+    for (let h = 0; h < H; h++) { scores[0][h] = 4; scores[1][h] = 5; } // A wins every hole
+    loadState(freshStateLiteral({ players: [{ name: 'A', hdcp: 0 }, { name: 'B', hdcp: 0 }],
+      gameType: 'match', holeCount: H, holeStart: 0, handicapMode: 'none', scores,
+      pars: Array(H).fill(4), hdcps: Array.from({ length: H }, (_, i) => i + 1),
+      gameOpts: Object.assign({ matchFormat: 'nassau', holeVal: 2, matchPressVal: 2 }, o) }));
+    return call('calcMatchMoney');
+  };
+  assertEqual(money(9, { matchFront: 5, matchBack: 5, matchOverall: 5 }), [5, -5],
+    'nine holes: a $5 match pays $5, not $10 — back and overall are eighteen-hole bets');
+  assertEqual(money(9, { matchFront: 0, matchBack: 0, matchOverall: 5 }), [0, 0],
+    'nine holes: an overall stake on its own settles nothing');
+  assertEqual(money(18, { matchFront: 5, matchBack: 5, matchOverall: 5 }), [15, -15],
+    'eighteen holes is unchanged: front, back and overall each settle');
+})();
 
 console.log('Stableford: money is the pairwise zero-sum differential of net Stableford points x $/point');
 loadState(freshStateLiteral({
