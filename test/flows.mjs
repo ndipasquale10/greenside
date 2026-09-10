@@ -815,6 +815,69 @@ section("The home screen tells the season's story");
   await ctx.close();
 }
 
+/**
+ * The card. You set the stakes on the game screen, and until now you did that
+ * with no idea who was hot, who owns you, or how this particular course has
+ * treated you -- all of which the app already knew, on the You and Season tabs,
+ * nowhere near the moment it matters. The interesting assertions here are the
+ * quiet ones: a group with no history gets no card rather than an empty shell,
+ * and a player name is data, not markup.
+ */
+section("The card reads the roster back before the stakes are set");
+{
+  const { ctx, p, errors } = await page();
+  const open = (players, course) =>
+    p.evaluate(async (a) => {
+      state.players = a.players.map((n, i) => ({ name: n, color: i }));
+      state.course = a.course;
+      showScreen("games");
+      await new Promise((r) => setTimeout(r, 450));
+      const el = document.getElementById("the-card");
+      return { html: el.innerHTML, text: el.innerText, imgs: el.querySelectorAll("img").length };
+    }, { players, course });
+
+  const full = await open(["You", "Big Dave", "Tommy P", "Sanjay"], "City Park G.C.");
+  ok(/THE CARD|The card/i.test(full.text), "the card renders for a group with history");
+  ok(/vs you/.test(full.text), "it names each player's head-to-head record against you");
+  ok(/down to you|up on you|all square/.test(full.text),
+    "the head-to-head money says which way it runs, rather than a bare signed number", full.text.slice(0, 120));
+  ok(/R here/.test(full.text), "it shows how this course has treated each player");
+  ok(/City Park/.test(full.text), "the course is named once the group has played it");
+  ok(/up\b/.test(full.text) || /down\b/.test(full.text), "a run of results surfaces as a streak");
+
+  const noCourse = await open(["You", "Big Dave"], "");
+  ok(!/R here/.test(noCourse.text), "no course, no course line");
+
+  const unplayed = await open(["You", "Big Dave"], "Never Played GC");
+  ok(!/R here/.test(unplayed.text), "a course nobody has played gets no course line");
+
+  const newcomer = await open(["You", "Brand New"], "City Park G.C.");
+  ok(/first round with the group/.test(newcomer.text), "someone with no history is called out, not left blank");
+
+  const hostile = await open(['<img src=x onerror="window.__TCX=1">Bad', "You"], "City Park G.C.");
+  const ran = await p.evaluate(() => !!window.__TCX);
+  ok(hostile.imgs === 0, "a hostile player name builds no elements", `built ${hostile.imgs}`);
+  ok(!ran, "and runs no handler");
+  ok(/<img/.test(hostile.text), "it is shown literally as text");
+
+  // A group with nothing behind it should get no card at all -- an empty
+  // bordered shell above the game picker is worse than nothing.
+  const empty = await p.evaluate(async () => {
+    const saved = localStorage.getItem("golfRounds");
+    localStorage.setItem("golfRounds", "{}");
+    state.players = [{ name: "You", color: 0 }, { name: "Someone", color: 1 }];
+    state.course = "Anywhere";
+    showScreen("games");
+    await new Promise((r) => setTimeout(r, 450));
+    const html = document.getElementById("the-card").innerHTML;
+    localStorage.setItem("golfRounds", saved);
+    return html;
+  });
+  ok(empty === "", "a group with no finished rounds gets no card at all", `got ${empty.length} chars`);
+  ok(errors.length === 0, "the card: no page errors", errors[0] || "");
+  await ctx.close();
+}
+
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

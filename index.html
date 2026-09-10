@@ -72,6 +72,28 @@ h1,h2,.brand-seal span,.welcome-title,.games-title,.es-title,.hole-big{font-synt
 .rv-rec{margin-left:auto;text-align:right;flex-shrink:0;}
 .rv-num{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:700;font-size:var(--fs-lg);color:var(--ink);}
 .rv-amt{font-size:var(--fs-2xs);font-weight:700;margin-top:var(--sp-1);}
+/* The card: who you are about to play, read before the stakes are set. */
+.tc-wrap{margin-bottom:var(--sp-8);}
+.tc-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--sp-5);margin-bottom:var(--sp-4);}
+.tc-k{font-size:var(--fs-2xs);font-weight:800;letter-spacing:var(--ls-label);text-transform:uppercase;color:var(--muted);}
+.tc-where{font-size:var(--fs-2xs);color:var(--muted);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tc-card{background:var(--card);border:var(--bw) solid var(--rule);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden;}
+.tc-row{display:flex;align-items:flex-start;gap:var(--sp-5);padding:var(--sp-6) var(--sp-7);border-bottom:var(--bw) solid var(--rule);}
+.tc-row:last-child{border-bottom:none;}
+.tc-row.tc-me{background:var(--surface-2);}
+.tc-body{flex:1;min-width:0;}
+.tc-top{display:flex;align-items:baseline;gap:var(--sp-4);}
+.tc-name{font-weight:700;font-size:var(--fs-sm);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tc-net{margin-left:auto;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:700;font-size:var(--fs-sm);white-space:nowrap;}
+.tc-tags{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-5);margin-top:var(--sp-3);font-size:var(--fs-2xs);color:var(--muted);font-weight:600;}
+.tc-tag b{font-weight:800;}
+.tc-hot{color:var(--gold-t);font-weight:800;}
+.tc-cold{color:var(--red-t);font-weight:800;}
+.tc-new{font-style:italic;}
+.tc-form{display:inline-flex;align-items:flex-end;gap:var(--sp-1);height:16px;flex-shrink:0;}
+.tc-bar{width:5px;border-radius:var(--radius-xs);background:var(--muted-c);}
+.tc-bar.up{background:var(--up);}
+.tc-bar.dn{background:var(--down);}
 /* Two heading levels, and only two. A section heading introduces a group of content; a panel label names content inside one card. */
 #game-desc:empty{display:none;}
 /* The options block docks under the selected game card, which sits inside a .form-group -- whose label rule uppercases everything. Option labels are sentences ("Blind Lone Wolf (before tee shots)"), not labels, so pin them above that rule rather than let ancestry decide. */
@@ -251,6 +273,7 @@ h1,h2,.brand-seal span,.welcome-title,.games-title,.es-title,.hole-big{font-synt
 
     <!-- Games Screen (pick the bets) -->
     <div id="games-screen" class="hidden">
+      <div id="the-card"></div>
       <div class="games-intro">
         <h2 class="games-title">Pick your game</h2>
         <p class="hint" id="games-intro-hint">Choose one main game, then stack any side bets on top. They all settle into one number.</p>
@@ -1054,7 +1077,7 @@ function importableRound(r){
 }
 function handleImportFile(e){const t=e.target.files&&e.target.files[0];if(e.target.value="",!t)return;const a=new FileReader;a.onload=()=>{const e=safeParseJSON(a.result,null);if(!e||"object"!=typeof e||!e.profiles&&!e.courses&&!e.rounds)return void showToast("Import failed: not a valid backup file.",{type:"error"});let s=0,n=0,o=0,d=0;if(Array.isArray(e.profiles)){const t=getSavedProfiles(),a=mergeByName(t,e.profiles);s=a.length-t.length,safeSetItem("golfProfiles",JSON.stringify(a))}if(Array.isArray(e.courses)){const t=getSavedCourses(),a=mergeByName(t,e.courses);n=a.length-t.length,safeSetItem("golfCourses",JSON.stringify(a))}if(e.rounds&&"object"==typeof e.rounds){const t=safeParseJSON(localStorage.getItem("golfRounds"),{}),c={};Object.keys(e.rounds).forEach(k=>{importableRound(e.rounds[k])&&(c[k]=e.rounds[k]),importableRound(e.rounds[k])||d++});const a={...c,...t};o=Object.keys(a).length-Object.keys(t).length,safeSetItem("golfRounds",JSON.stringify(a))}"function"==typeof renderPlayers&&renderPlayers(),"function"==typeof renderHistory&&renderHistory(),"function"==typeof updateNavCounts&&updateNavCounts(),showToast("Imported "+s+" profiles, "+n+" courses, "+o+" rounds"+(d?" \u2014 skipped "+d+" unreadable round"+(1===d?"":"s"):""),{type:d?"info":"success"})},a.onerror=()=>showToast("Could not read the selected file.",{type:"error"}),a.readAsText(t)}const SCREENS={
   home:{id:"home-screen",tab:"home",enter:()=>{_groupEditMode=!1,renderResumeCard(),renderLiveGames(),renderHome()}},
-  games:{id:"games-screen",tab:"games",enter:()=>{updateGameOptions(),dockGameOptions(),updateGamesSummary()}},
+  games:{id:"games-screen",tab:"games",enter:()=>{renderTheCard(),updateGameOptions(),dockGameOptions(),updateGamesSummary()}},
   setup:{id:"setup-screen",tab:"games",enter:()=>{}},
   scoring:{id:"scoring-screen",tab:"scoring",chrome:"round",enter:()=>{}},
   watch:{id:"watch-screen",chrome:"watch",enter:()=>renderWatch()},
@@ -1140,6 +1163,67 @@ function _rivalOf(rounds,me){const s={};
   const behind=l.filter(v=>v.diff<-.005);
   if(behind.length)return Object.assign(behind.sort((a,b)=>a.diff-b.diff||b.n-a.n)[0],{ahead:!0});
   return Object.assign(l.sort((a,b)=>b.diff-a.diff||b.n-a.n)[0],{ahead:!1})}
+// The card. Everything below is already on the device -- it just lives on the
+// You and Season tabs, which is nowhere near the moment it matters. You set the
+// stakes on the game screen with no idea who is hot, who owns you, or how this
+// particular course has treated you, so this reads the roster back to you first.
+function theCardRows(){
+  const me=getPrimaryPlayerName(),course=(state.course||"").trim().toLowerCase();
+  const fin=getAllRounds().filter(r=>r.finished&&r.money&&r.players).sort((a,b)=>_rTime(a)-_rTime(b));
+  return (state.players||[]).map(p=>{
+    const name=p.name,played=fin.filter(r=>null!=_myNet(r,name));
+    const net=played.reduce((a,r)=>a+_myNet(r,name),0);
+    // Streak runs back from the most recent round and stops at the first result
+    // that breaks it; a pushed round ends it rather than extending it.
+    let streak=0,dir=0;
+    for(let i=played.length-1;i>=0;i--){const v=_myNet(played[i],name),sgn=v>.005?1:v<-.005?-1:0;
+      if(!sgn)break;if(!dir)dir=sgn;if(sgn!==dir)break;streak++}
+    let w=0,l=0,diff=0,h2h=0;
+    if(name!==me)fin.forEach(r=>{const a=_myNet(r,me),b=_myNet(r,name);if(null==a||null==b)return;
+      h2h++,diff+=b-a,b>a?w++:b<a&&l++});
+    let cN=0,cMoney=0;
+    if(course)played.forEach(r=>{if((r.course||"").trim().toLowerCase()===course)cN++,cMoney+=_myNet(r,name)});
+    return{name:name,color:p.color,isMe:name===me,rounds:played.length,net:net,
+      form:played.slice(-5).map(r=>_myNet(r,name)),streak:streak,dir:dir,h2h:h2h,w:w,l:l,diff:diff,cN:cN,cMoney:cMoney}
+  })
+}
+function renderTheCard(){
+  const el=document.getElementById("the-card");if(!el)return;
+  const rows=theCardRows();
+  // Before the group's first finished round there is nothing to say, and an
+  // empty shell is worse than no card at all.
+  if(!rows.length||!rows.some(r=>r.rounds>0))return void(el.innerHTML="");
+  const course=(state.course||"").trim(),anyHere=rows.some(r=>r.cN>0);
+  // One scale across every player so the form bars compare like for like.
+  const mx=Math.max(1,...rows.reduce((a,r)=>a.concat(r.form.map(Math.abs)),[]));
+  let h='<div class="tc-wrap"><div class="tc-head"><span class="tc-k">The card</span>'
+    +(course&&anyHere?'<span class="tc-where">'+esc(course)+'</span>':"")+'</div><div class="tc-card">';
+  rows.forEach(r=>{
+    const tags=[];
+    if(!r.rounds)tags.push('<span class="tc-new">first round with the group</span>');
+    else{
+      if(!r.isMe&&r.h2h){const amt=fmtMoney(Math.abs(r.diff)).replace("+","");
+        tags.push('<span class="tc-tag">'+r.w+'–'+r.l+' vs you · <b class="'
+        +(r.diff>.005?"match-dn":r.diff<-.005?"match-up":"")+'">'
+        +(Math.abs(r.diff)<.005?"all square":amt+(r.diff>0?" up on you":" down to you"))+'</b></span>');}
+      if(r.streak>=3)tags.push('<span class="'+(r.dir>0?"tc-hot":"tc-cold")+'">'+(r.dir>0?"\u{1F525} "+r.streak+" up":"▼ "+r.streak+" down")+'</span>');
+      if(r.cN)tags.push('<span class="tc-tag">'+r.cN+'R here · <b class="'
+        +(r.cMoney>.005?"match-up":r.cMoney<-.005?"match-dn":"")+'">'+fmtMoney(r.cMoney)+'</b></span>');
+    }
+    // Square-root scale: a single big round would otherwise flatten every other
+    // bar onto the floor, which reads as "no form" rather than "a quiet week".
+    const bars=r.form.map(v=>'<span class="tc-bar '+(v>.005?"up":v<-.005?"dn":"")+'" style="height:'
+      +Math.max(3,Math.round(16*Math.sqrt(Math.abs(v)/mx)))+'px"></span>').join("");
+    h+='<div class="tc-row'+(r.isMe?" tc-me":"")+'">'+avatarHTML(r,26)
+      +'<div class="tc-body"><div class="tc-top"><span class="tc-name">'+esc(r.name)+'</span>'
+      +(bars?'<span class="tc-form" aria-hidden="true">'+bars+'</span>':"")
+      +'<span class="tc-net '+(r.net>.005?"match-up":r.net<-.005?"match-dn":"")+'">'
+      +(r.rounds?fmtMoney(r.net):"—")+'</span></div>'
+      +(tags.length?'<div class="tc-tags">'+tags.join("")+'</div>':"")
+      +'</div></div>'
+  });
+  el.innerHTML=h+'</div></div>'
+}
 function renderHome(){
   const el=document.getElementById("home-content");if(!el)return;
   const{rounds,list,hiddenCount}=seasonAgg(),me=getPrimaryPlayerName(),mine=list.find(p=>p.name===me);
